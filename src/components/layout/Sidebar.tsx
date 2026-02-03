@@ -1,0 +1,127 @@
+import { useState } from "react";
+import { 
+  Cpu, 
+  Database, 
+  Shield, 
+  Lock, 
+  Activity, 
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Atom
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  status: "active" | "idle" | "warning";
+}
+
+const navItems: NavItem[] = [
+  { id: "dashboard", label: "Dashboard", icon: Activity, status: "active" },
+  { id: "routing", label: "Compilación & Routing", icon: Cpu, status: "active" },
+  { id: "qml", label: "Carga de Datos (QML)", icon: Database, status: "idle" },
+  { id: "qec", label: "Corrección de Errores", icon: Shield, status: "warning" },
+  { id: "pqc", label: "Criptografía PQC", icon: Lock, status: "idle" },
+];
+
+interface SidebarProps {
+  activeModule: string;
+  onModuleChange: (id: string) => void;
+}
+
+export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <aside 
+      className={cn(
+        "relative flex flex-col h-screen border-r border-border bg-sidebar transition-all duration-300",
+        collapsed ? "w-20" : "w-72"
+      )}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-3 p-6 border-b border-border">
+        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 quantum-glow">
+          <Atom className="w-6 h-6 text-primary" />
+        </div>
+        {!collapsed && (
+          <div className="flex flex-col">
+            <span className="text-lg font-semibold quantum-text">Q-Orchestrator</span>
+            <span className="text-xs text-muted-foreground font-mono">v1.0.0</span>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeModule === item.id;
+          
+          return (
+            <button
+              key={item.id}
+              onClick={() => onModuleChange(item.id)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
+                "hover:bg-sidebar-accent group",
+                isActive && "bg-primary/10 border border-primary/30"
+              )}
+            >
+              <div className="relative">
+                <Icon 
+                  className={cn(
+                    "w-5 h-5 transition-colors",
+                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                  )} 
+                />
+                {/* Status indicator */}
+                <span 
+                  className={cn(
+                    "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full",
+                    item.status === "active" && "bg-success",
+                    item.status === "warning" && "bg-warning",
+                    item.status === "idle" && "bg-muted-foreground/50"
+                  )}
+                />
+              </div>
+              {!collapsed && (
+                <span 
+                  className={cn(
+                    "text-sm font-medium transition-colors",
+                    isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Settings */}
+      <div className="p-4 border-t border-border">
+        <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-sidebar-accent transition-colors text-muted-foreground hover:text-foreground">
+          <Settings className="w-5 h-5" />
+          {!collapsed && <span className="text-sm font-medium">Configuración</span>}
+        </button>
+      </div>
+
+      {/* Collapse toggle */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+      >
+        {collapsed ? (
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+        )}
+      </button>
+    </aside>
+  );
+}
