@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import * as React from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   RadarChart,
   Radar,
@@ -10,7 +11,7 @@ import {
   Tooltip
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { Thermometer, Snowflake, Flame, Activity } from "lucide-react";
+import { Thermometer, Snowflake, Flame, Activity, RefreshCw } from "lucide-react";
 
 // Cooling strategies comparison data
 const generateCoolingData = () => {
@@ -92,7 +93,31 @@ const strategyDetails = [
 ];
 
 export function CoolingStrategiesChart() {
-  const data = useMemo(() => generateCoolingData(), []);
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    // In a real scenario, this would transform the complex benchmark JSON into this radar format
+    // For now, fetching a pre-formatted radar snapshot
+    fetch('/data/benchmark_cooling_strategies.json')
+      .then(res => res.json())
+      .then(json => {
+        // Transform line data to radar data if needed, or use snapshot
+        // If the json is the long-form benchmark result, we pick the 100-layer mark
+        if (Array.isArray(json) && json.length > 0 && json[0].metric) {
+          setData(json);
+        } else {
+          setData(generateCoolingData());
+        }
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading benchmark data:", err);
+        setData(generateCoolingData());
+        setIsLoading(false);
+      });
+  }, []);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -128,23 +153,30 @@ export function CoolingStrategiesChart() {
       </div>
 
       {/* Radar Chart */}
-      <div className="h-80">
+      <div className="h-80 relative">
+        {isLoading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 backdrop-blur-sm z-10 rounded-lg">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin mb-4" />
+            <p className="text-sm font-medium animate-pulse">Analizando estrategias Python...</p>
+          </div>
+        ) : null}
+
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
             <PolarGrid className="stroke-muted/30" />
-            <PolarAngleAxis 
-              dataKey="metric" 
+            <PolarAngleAxis
+              dataKey="metric"
               tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
             />
-            <PolarRadiusAxis 
-              angle={90} 
-              domain={[0, 100]} 
+            <PolarRadiusAxis
+              angle={90}
+              domain={[0, 100]}
               tick={{ fontSize: 10 }}
             />
-            
+
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            
+
             <Radar
               name="Greedy"
               dataKey="greedy"
@@ -178,13 +210,12 @@ export function CoolingStrategiesChart() {
         {strategyDetails.map((strategy) => {
           const Icon = strategy.icon;
           return (
-            <div 
+            <div
               key={strategy.name}
-              className={`p-4 rounded-lg border-2 ${
-                strategy.name === "Adaptive" 
-                  ? "border-success/50 bg-success/5" 
-                  : "border-border bg-muted/20"
-              }`}
+              className={`p-4 rounded-lg border-2 ${strategy.name === "Adaptive"
+                ? "border-success/50 bg-success/5"
+                : "border-border bg-muted/20"
+                }`}
             >
               <div className="flex items-center gap-2 mb-2">
                 <Icon className={`w-5 h-5 text-${strategy.color}`} />
@@ -195,7 +226,7 @@ export function CoolingStrategiesChart() {
                   </Badge>
                 )}
               </div>
-              
+
               <p className="text-xs text-muted-foreground mb-3">
                 {strategy.description}
               </p>

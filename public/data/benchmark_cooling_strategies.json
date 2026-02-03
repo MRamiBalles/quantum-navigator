@@ -1,0 +1,68 @@
+[
+    {
+        "layer": 1,
+        "greedy": 0.0,
+        "conservative": 0.0,
+        "adaptive": 0.0
+    },
+    {
+        "layer": 10,
+        "greedy": 2.5,
+        "conservative": 0.5,
+        "adaptive": 0.8
+    },
+    {
+        "layer": 20,
+        "greedy": 5.8,
+        "conservative": 1.2,
+        "adaptive": 1.5
+    },
+    {
+        "layer": 30,
+        "greedy": 10.2,
+        "conservative": 2.1,
+        "adaptive": 2.2
+    },
+    {
+        "layer": 40,
+        "greedy": 15.5,
+        "conservative": 3.5,
+        "adaptive": 3.1
+    },
+    {
+        "layer": 50,
+        "greedy": 22.1,
+        "conservative": 5.2,
+        "adaptive": 4.2
+    },
+    {
+        "layer": 60,
+        "greedy": 30.5,
+        "conservative": 7.1,
+        "adaptive": 5.5
+    },
+    {
+        "layer": 70,
+        "greedy": 40.2,
+        "conservative": 9.5,
+        "adaptive": 7.1
+    },
+    {
+        "layer": 80,
+        "greedy": 52.1,
+        "conservative": 12.2,
+        "adaptive": 8.8
+    },
+    {
+        "layer": 90,
+        "greedy": 65.8,
+        "conservative": 15.5,
+        "adaptive": 10.8
+    },
+    {
+        "layer": 100,
+        "greedy": 82.1,
+        "conservative": 19.2,
+        "adaptive": 13.2
+    }
+]

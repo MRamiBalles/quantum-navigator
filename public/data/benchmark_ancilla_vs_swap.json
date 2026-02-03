@@ -1,0 +1,26 @@
+[
+    {
+        "circuit": "QAOA",
+        "swap_depth": 140,
+        "ancilla_depth": 12,
+        "reduction": 11.6
+    },
+    {
+        "circuit": "QFT (8)",
+        "swap_depth": 210,
+        "ancilla_depth": 8,
+        "reduction": 26.2
+    },
+    {
+        "circuit": "GHZ (16)",
+        "swap_depth": 85,
+        "ancilla_depth": 30,
+        "reduction": 2.8
+    },
+    {
+        "circuit": "VQE (Layer)",
+        "swap_depth": 120,
+        "ancilla_depth": 25,
+        "reduction": 4.8
+    }
+]

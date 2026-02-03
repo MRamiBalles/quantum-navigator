@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -13,7 +13,8 @@ import {
   ComposedChart
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, RefreshCw } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Benchmark data based on physical constraints
 const generateVelocityData = () => {
@@ -26,13 +27,13 @@ const generateVelocityData = () => {
     // Fidelity model: F = exp(-heating * velocity^2)
     const heating = heatingCoefficient * Math.pow(v / optimalVelocity, 2);
     const fidelity = Math.exp(-heating) * (v <= optimalVelocity ? 1 : Math.exp(-(v - optimalVelocity) * 5));
-    
+
     // Decoherence cost model
     const decoherence = v * (v / maxVelocity) * heatingCoefficient * 100;
-    
+
     // P_loss probability
-    const pLoss = v > optimalVelocity 
-      ? Math.min(0.5, (v - optimalVelocity) / (maxVelocity - optimalVelocity) * 0.5) 
+    const pLoss = v > optimalVelocity
+      ? Math.min(0.5, (v - optimalVelocity) / (maxVelocity - optimalVelocity) * 0.5)
       : 0.01;
 
     data.push({
@@ -47,7 +48,24 @@ const generateVelocityData = () => {
 };
 
 export function VelocityFidelityChart() {
-  const data = useMemo(() => generateVelocityData(), []);
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetch('/data/benchmark_velocity_fidelity.json')
+      .then(res => res.json())
+      .then(json => {
+        setData(json);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading benchmark data:", err);
+        // Fallback to mock data if fetch fails
+        setData(generateVelocityData());
+        setIsLoading(false);
+      });
+  }, []);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -58,21 +76,21 @@ export function VelocityFidelityChart() {
           {payload.map((entry: any, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
               {entry.name}: {entry.value.toFixed(2)}
-              {entry.dataKey === "fidelity" ? "%" : 
-               entry.dataKey === "pLoss" ? "%" : ""}
+              {entry.dataKey === "fidelity" ? "%" :
+                entry.dataKey === "pLoss" ? "%" : ""}
             </p>
           ))}
           <div className="mt-2 pt-2 border-t border-border">
-            <Badge 
+            <Badge
               variant="outline"
               className={
                 zone === "safe" ? "text-success border-success" :
-                zone === "warning" ? "text-warning border-warning" :
-                "text-destructive border-destructive"
+                  zone === "warning" ? "text-warning border-warning" :
+                    "text-destructive border-destructive"
               }
             >
-              {zone === "safe" ? "Zona Segura" : 
-               zone === "warning" ? "Zona de Riesgo" : "Zona Crítica"}
+              {zone === "safe" ? "Zona Segura" :
+                zone === "warning" ? "Zona de Riesgo" : "Zona Crítica"}
             </Badge>
           </div>
         </div>
@@ -97,7 +115,14 @@ export function VelocityFidelityChart() {
       </div>
 
       {/* Chart */}
-      <div className="h-80">
+      <div className="h-80 relative">
+        {isLoading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 backdrop-blur-sm z-10 rounded-lg">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin mb-4" />
+            <p className="text-sm font-medium animate-pulse">Sincronizando con backend Python...</p>
+          </div>
+        ) : null}
+
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <defs>
@@ -106,48 +131,48 @@ export function VelocityFidelityChart() {
                 <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            
+
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
-            
-            <XAxis 
-              dataKey="velocity" 
+
+            <XAxis
+              dataKey="velocity"
               label={{ value: "Velocidad (µm/µs)", position: "bottom", offset: 0 }}
               tick={{ fontSize: 12 }}
               className="text-muted-foreground"
             />
-            <YAxis 
+            <YAxis
               yAxisId="left"
               label={{ value: "Fidelidad (%)", angle: -90, position: "insideLeft" }}
               domain={[80, 100]}
               tick={{ fontSize: 12 }}
             />
-            <YAxis 
+            <YAxis
               yAxisId="right"
               orientation="right"
               label={{ value: "P_loss (%)", angle: 90, position: "insideRight" }}
               domain={[0, 50]}
               tick={{ fontSize: 12 }}
             />
-            
+
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            
+
             {/* Reference lines */}
-            <ReferenceLine 
-              x={0.55} 
+            <ReferenceLine
+              x={0.55}
               yAxisId="left"
-              stroke="hsl(var(--success))" 
+              stroke="hsl(var(--success))"
               strokeDasharray="5 5"
               label={{ value: "Óptimo", position: "top", fill: "hsl(var(--success))" }}
             />
-            <ReferenceLine 
-              x={0.8} 
+            <ReferenceLine
+              x={0.8}
               yAxisId="left"
-              stroke="hsl(var(--destructive))" 
+              stroke="hsl(var(--destructive))"
               strokeDasharray="5 5"
               label={{ value: "Límite", position: "top", fill: "hsl(var(--destructive))" }}
             />
-            
+
             {/* Fidelity line */}
             <Line
               yAxisId="left"
@@ -159,7 +184,7 @@ export function VelocityFidelityChart() {
               dot={false}
               activeDot={{ r: 6, strokeWidth: 2 }}
             />
-            
+
             {/* P_loss line */}
             <Line
               yAxisId="right"
@@ -214,10 +239,9 @@ interface ModelCardProps {
 function ModelCard({ icon: Icon, title, range, description, status }: ModelCardProps) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
-      <Icon className={`w-5 h-5 mt-0.5 ${
-        status === "success" ? "text-success" :
-        status === "warning" ? "text-warning" : "text-primary"
-      }`} />
+      <Icon className={`w-5 h-5 mt-0.5 ${status === "success" ? "text-success" :
+          status === "warning" ? "text-warning" : "text-primary"
+        }`} />
       <div>
         <p className="font-medium text-sm">{title}</p>
         <p className="font-mono text-xs text-primary">{range}</p>

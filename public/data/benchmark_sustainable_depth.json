@@ -1,0 +1,32 @@
+[
+    {
+        "velocity": 0.2,
+        "depth": 4850,
+        "time": 320.5,
+        "rate": 15200
+    },
+    {
+        "velocity": 0.3,
+        "depth": 3120,
+        "time": 215.2,
+        "rate": 22500
+    },
+    {
+        "velocity": 0.4,
+        "depth": 2100,
+        "time": 145.8,
+        "rate": 28800
+    },
+    {
+        "velocity": 0.5,
+        "depth": 1450,
+        "time": 95.2,
+        "rate": 35200
+    },
+    {
+        "velocity": 0.55,
+        "depth": 1050,
+        "time": 72.1,
+        "rate": 42500
+    }
+]

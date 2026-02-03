@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import * as React from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -11,7 +12,7 @@ import {
   Cell
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { Zap, ArrowRight } from "lucide-react";
+import { Zap, ArrowRight, RefreshCw } from "lucide-react";
 
 // Benchmark data: Ancilla vs SWAP gate comparison
 const generateComparisonData = () => {
@@ -29,14 +30,14 @@ const generateComparisonData = () => {
     const swapGates = Math.floor(circuit.qubits * 1.5 + Math.random() * circuit.qubits);
     const swapDepth = swapGates * 3; // Each SWAP = 3 CNOTs
     const swapTime = swapDepth * 50; // 50ns per CNOT layer
-    
+
     // Flying ancilla model: 1-2 shuttles per remote gate
     const shuttleMoves = Math.floor(circuit.qubits * 0.3 + 2);
     const ancillaDepth = shuttleMoves * 2; // Shuttle + gate
     const ancillaTime = shuttleMoves * 80 + ancillaDepth * 20; // Shuttle time + gate time
-    
+
     const reduction = (swapTime / ancillaTime).toFixed(1);
-    
+
     return {
       circuit: circuit.name,
       qubits: circuit.qubits,
@@ -53,7 +54,23 @@ const generateComparisonData = () => {
 };
 
 export function AncillaVsSwapChart() {
-  const data = useMemo(() => generateComparisonData(), []);
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetch('/data/benchmark_ancilla_vs_swap.json')
+      .then(res => res.json())
+      .then(json => {
+        setData(json);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading benchmark data:", err);
+        setData(generateComparisonData());
+        setIsLoading(false);
+      });
+  }, []);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -145,34 +162,41 @@ export function AncillaVsSwapChart() {
       </div>
 
       {/* Chart */}
-      <div className="h-80">
+      <div className="h-80 relative">
+        {isLoading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 backdrop-blur-sm z-10 rounded-lg">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin mb-4" />
+            <p className="text-sm font-medium animate-pulse">Sincronizando con backend Python...</p>
+          </div>
+        ) : null}
+
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
-            
-            <XAxis 
-              dataKey="circuit" 
+
+            <XAxis
+              dataKey="circuit"
               tick={{ fontSize: 12 }}
               className="text-muted-foreground"
             />
-            <YAxis 
+            <YAxis
               label={{ value: "Tiempo (ns)", angle: -90, position: "insideLeft" }}
               tick={{ fontSize: 12 }}
             />
-            
+
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            
-            <Bar 
-              dataKey="swapTime" 
-              name="SWAP Chain" 
+
+            <Bar
+              dataKey="swapTime"
+              name="SWAP Chain"
               fill="hsl(var(--destructive))"
               opacity={0.8}
               radius={[4, 4, 0, 0]}
             />
-            <Bar 
-              dataKey="ancillaTime" 
-              name="Flying Ancilla" 
+            <Bar
+              dataKey="ancillaTime"
+              name="Flying Ancilla"
               fill="hsl(var(--success))"
               opacity={0.9}
               radius={[4, 4, 0, 0]}
@@ -187,7 +211,7 @@ export function AncillaVsSwapChart() {
           <Zap className="w-5 h-5 text-quantum-purple" />
           <span className="font-semibold">Estrategia BUS (Buffered Unidirectional Shuttle)</span>
         </div>
-        
+
         <div className="flex items-center gap-4 text-sm">
           <div className="flex-1 p-3 rounded bg-destructive/10 border border-destructive/20">
             <p className="font-medium text-destructive">SWAP Chain (Superconductores)</p>
@@ -195,9 +219,9 @@ export function AncillaVsSwapChart() {
               O(n) puertas SWAP × 3 CNOTs cada una
             </p>
           </div>
-          
+
           <ArrowRight className="w-6 h-6 text-muted-foreground" />
-          
+
           <div className="flex-1 p-3 rounded bg-success/10 border border-success/20">
             <p className="font-medium text-success">Flying Ancilla (FPQA)</p>
             <p className="text-xs text-muted-foreground mt-1">

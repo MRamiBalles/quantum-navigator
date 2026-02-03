@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import * as React from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -10,37 +11,37 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { Layers, Grid3X3, ArrowDownUp } from "lucide-react";
+import { Layers, Grid3X3, ArrowDownUp, RefreshCw } from "lucide-react";
 
 // Generate Surface Code cycle data
 const generateZonedCycleData = () => {
   const distances = [3, 5, 7];
   const cycles = 20;
-  
+
   const data = [];
-  
+
   for (let cycle = 0; cycle <= cycles; cycle++) {
     const entry: any = { cycle };
-    
+
     distances.forEach(d => {
       // Logical error rate decreases exponentially with distance
       const physicalError = 0.001; // 0.1% physical error rate
       const threshold = 0.01; // ~1% threshold
       const suppressionRatio = threshold / physicalError;
-      
+
       // P_L ~ (p/p_th)^((d+1)/2) for p < p_th
       const baseLogicalError = Math.pow(1 / suppressionRatio, (d + 1) / 2);
-      
+
       // Accumulate error over cycles (simplified model)
       const accumulatedError = 1 - Math.pow(1 - baseLogicalError, cycle + 1);
-      
+
       entry[`d${d}`] = parseFloat((accumulatedError * 100).toFixed(4));
       entry[`d${d}_fidelity`] = parseFloat(((1 - accumulatedError) * 100).toFixed(2));
     });
-    
+
     data.push(entry);
   }
-  
+
   return data;
 };
 
@@ -53,8 +54,24 @@ const zoneArchitecture = [
 ];
 
 export function ZonedCyclesChart() {
-  const data = useMemo(() => generateZonedCycleData(), []);
+  const [data, setData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedDistance, setSelectedDistance] = useState<number | null>(null);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetch('/data/benchmark_zoned_cycles.json')
+      .then(res => res.json())
+      .then(json => {
+        setData(json);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading benchmark data:", err);
+        setData(generateZonedCycleData());
+        setIsLoading(false);
+      });
+  }, []);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -70,7 +87,7 @@ export function ZonedCyclesChart() {
                     d={distance}:
                   </span>
                   <span className="font-mono">
-                    {entry.dataKey.includes('fidelity') 
+                    {entry.dataKey.includes('fidelity')
                       ? `${entry.value.toFixed(2)}% fidelidad`
                       : `${entry.value.toFixed(4)}% error`
                     }
@@ -108,11 +125,10 @@ export function ZonedCyclesChart() {
             <button
               key={d}
               onClick={() => setSelectedDistance(selectedDistance === d ? null : d)}
-              className={`px-3 py-1 rounded-lg text-sm font-mono transition-colors ${
-                selectedDistance === d 
-                  ? "bg-primary text-primary-foreground" 
+              className={`px-3 py-1 rounded-lg text-sm font-mono transition-colors ${selectedDistance === d
+                  ? "bg-primary text-primary-foreground"
                   : "bg-muted hover:bg-muted/80"
-              }`}
+                }`}
             >
               d={d}
             </button>
@@ -125,41 +141,48 @@ export function ZonedCyclesChart() {
       </div>
 
       {/* Error Rate Chart */}
-      <div className="h-72">
+      <div className="h-72 relative">
+        {isLoading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 backdrop-blur-sm z-10 rounded-lg">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin mb-4" />
+            <p className="text-sm font-medium animate-pulse">Calculando ciclos QEC...</p>
+          </div>
+        ) : null}
+
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <defs>
               <linearGradient id="colorD3" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0}/>
+                <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorD5" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--warning))" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="hsl(var(--warning))" stopOpacity={0}/>
+                <stop offset="5%" stopColor="hsl(var(--warning))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--warning))" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorD7" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
+                <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
               </linearGradient>
             </defs>
-            
+
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
-            
-            <XAxis 
-              dataKey="cycle" 
+
+            <XAxis
+              dataKey="cycle"
               label={{ value: "Ciclo QEC", position: "bottom", offset: 0 }}
               tick={{ fontSize: 12 }}
             />
-            <YAxis 
+            <YAxis
               label={{ value: "Error Lógico (%)", angle: -90, position: "insideLeft" }}
               tick={{ fontSize: 12 }}
               scale="log"
               domain={['auto', 'auto']}
             />
-            
+
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            
+
             {(!selectedDistance || selectedDistance === 3) && (
               <Area
                 type="monotone"
@@ -200,10 +223,10 @@ export function ZonedCyclesChart() {
           <Layers className="w-5 h-5 text-quantum-purple" />
           <span className="font-semibold">Arquitectura de Zonas FPQA</span>
         </div>
-        
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {zoneArchitecture.map((zone) => (
-            <div 
+            <div
               key={zone.zone}
               className="p-3 rounded-lg bg-muted/30 border border-border"
             >

@@ -1,0 +1,56 @@
+[
+    {
+        "velocity": 0.1,
+        "fidelity": 99.98,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.2,
+        "fidelity": 99.92,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.3,
+        "fidelity": 99.82,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.4,
+        "fidelity": 99.68,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.5,
+        "fidelity": 99.50,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.55,
+        "fidelity": 99.39,
+        "pLoss": 0.01,
+        "zone": "safe"
+    },
+    {
+        "velocity": 0.6,
+        "fidelity": 98.20,
+        "pLoss": 5.0,
+        "zone": "warning"
+    },
+    {
+        "velocity": 0.7,
+        "fidelity": 95.10,
+        "pLoss": 15.0,
+        "zone": "warning"
+    },
+    {
+        "velocity": 0.8,
+        "fidelity": 88.40,
+        "pLoss": 45.0,
+        "zone": "danger"
+    }
+]
