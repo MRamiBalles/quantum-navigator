@@ -612,7 +612,11 @@ async def save_favorite(
 # TILT-lite Topological Optimizer Endpoint
 # ============================================================================
 
-from optimizer import TILTOptimizer
+# ============================================================================
+# Spectral-AOD/TILT Endpoint
+# ============================================================================
+
+from optimizer import SpectralAODRouter
 
 class OptimizationRequest(BaseModel):
     num_qubits: int = 50
@@ -627,15 +631,14 @@ async def optimize_topology(
     api_key: str = Depends(verify_api_key)
 ):
     """
-    Runs the TILT-lite topological optimizer to reduce heating.
-    Returns comparison of random vs. spectral mapping costs.
+    Runs the Spectral-AOD topological optimizer.
+    Returns comparison of heating vs AOD complexity.
     """
     # Check rate limit (10 req/min for compute-heavy optimization)
-    # Using 'benchmarks' bucket as it's compute intensive
     await check_rate_limit(req, "benchmarks")
     
     try:
-        opt = TILTOptimizer(request.width, request.height)
+        opt = SpectralAODRouter(request.width, request.height)
         graph = opt.generate_random_circuit_graph(request.num_qubits, request.num_gates)
         result = opt.optimize_mapping(graph)
         return result
@@ -674,14 +677,16 @@ from benchmarks.benchmark_crypto import run_crypto_benchmark
 @app.get("/api/benchmarks/crypto")
 async def get_crypto_analysis(
     req: Request,
+    year: int = 2026,
     api_key: str = Depends(verify_api_key)
 ):
     """
     Returns estimated resources to break RSA/ECC vs PQC resilience.
+    Uses 'year' parameter for hardware roadmap alignment (IBM/QuEra).
     """
     await check_rate_limit(req, "benchmarks")
     try:
-        data = run_crypto_benchmark()
+        data = run_crypto_benchmark(target_year=year)
         return data
     except Exception as e:
         logger.error(f"Crypto benchmark failed: {str(e)}")
