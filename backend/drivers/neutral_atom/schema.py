@@ -58,6 +58,22 @@ class WaveformType(str, Enum):
     COMPOSITE = "composite"
 
 
+class ZoneType(str, Enum):
+    """
+    Functional zones in zoned architecture (Harvard/MIT/QuEra 2025).
+    
+    Modern neutral atom processors divide the register into functional zones:
+    - STORAGE: Atoms parked between operations, shielded from laser light
+    - ENTANGLEMENT: Active gate zone where Rydberg pulses are applied
+    - READOUT: Fluorescence imaging zone for measurements
+    - BUFFER: Transition zone between others (optional)
+    """
+    STORAGE = "STORAGE"
+    ENTANGLEMENT = "ENTANGLEMENT"
+    READOUT = "READOUT"
+    BUFFER = "BUFFER"
+
+
 # =============================================================================
 # GEOMETRY: Atom Register Definition
 # =============================================================================
@@ -74,6 +90,49 @@ class AtomPosition(BaseModel):
     aod_col: Optional[int] = Field(default=None, description="AOD grid column (for topological validation)")
 
 
+class ZoneDefinition(BaseModel):
+    """
+    Defines a functional zone in the zoned architecture.
+    
+    Based on Harvard/MIT/QuEra 2025 continuous-operation processor design:
+    - Atoms are shuttled between zones for different operations
+    - Storage zone has shielding light to protect coherence
+    - Entanglement zone is where Rydberg pulses are applied
+    - Readout zone is where fluorescence measurement occurs
+    """
+    zone_id: str = Field(..., description="Unique zone identifier")
+    zone_type: ZoneType = Field(..., description="Functional type of zone")
+    
+    # Bounding box in micrometers
+    x_min: float = Field(..., description="Left boundary in µm")
+    x_max: float = Field(..., description="Right boundary in µm")
+    y_min: float = Field(..., description="Bottom boundary in µm")
+    y_max: float = Field(..., description="Top boundary in µm")
+    
+    # Zone-specific properties
+    shielding_light: bool = Field(
+        default=False, 
+        description="If True, zone has shielding light (reduces gate fidelity but protects storage)"
+    )
+    
+    @model_validator(mode='after')
+    def validate_bounds(self) -> 'ZoneDefinition':
+        """Ensure bounds are valid."""
+        if self.x_min >= self.x_max:
+            raise ValueError(f"Zone {self.zone_id}: x_min must be < x_max")
+        if self.y_min >= self.y_max:
+            raise ValueError(f"Zone {self.zone_id}: y_min must be < y_max")
+        return self
+    
+    def contains_point(self, x: float, y: float) -> bool:
+        """Check if a point is inside this zone."""
+        return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
+    
+    def contains_atom(self, atom: 'AtomPosition') -> bool:
+        """Check if an atom is inside this zone."""
+        return self.contains_point(atom.x, atom.y)
+
+
 class NeutralAtomRegister(BaseModel):
     """
     Defines the spatial arrangement of atoms in the quantum register.
@@ -81,6 +140,10 @@ class NeutralAtomRegister(BaseModel):
     Key constraints enforced:
     - min_atom_distance: Minimum separation to avoid collisions (~4 µm)
     - blockade_radius: Rydberg blockade radius for entanglement (~6-10 µm)
+    
+    Zoned Architecture (v2.1):
+    - Optional zones define functional regions (Storage, Entanglement, Readout)
+    - Operations are validated against zone types
     """
     layout_type: LayoutType = Field(default=LayoutType.ARBITRARY)
     min_atom_distance: float = Field(default=4.0, ge=1.0, le=20.0, 
@@ -89,6 +152,12 @@ class NeutralAtomRegister(BaseModel):
                                     description="Rydberg blockade radius in µm")
     atoms: list[AtomPosition] = Field(..., min_length=1, max_length=256,
                                        description="List of atom positions")
+    
+    # Zoned architecture (optional for backward compatibility)
+    zones: Optional[list[ZoneDefinition]] = Field(
+        default=None,
+        description="Functional zones (Storage, Entanglement, Readout). If None, entire canvas is Entanglement zone."
+    )
     
     @field_validator('atoms')
     @classmethod
@@ -113,6 +182,28 @@ class NeutralAtomRegister(BaseModel):
     def get_slm_atoms(self) -> list[AtomPosition]:
         """Get all static (SLM) atoms."""
         return [a for a in self.atoms if a.role == TrapRole.SLM]
+    
+    def get_zone_at_position(self, x: float, y: float) -> Optional[ZoneDefinition]:
+        """Get the zone containing a given position (first match)."""
+        if self.zones is None:
+            return None
+        for zone in self.zones:
+            if zone.contains_point(x, y):
+                return zone
+        return None
+    
+    def get_atom_zone(self, atom_id: int) -> Optional[ZoneDefinition]:
+        """Get the zone containing a specific atom."""
+        atom = self.get_atom_by_id(atom_id)
+        if atom is None:
+            return None
+        return self.get_zone_at_position(atom.x, atom.y)
+    
+    def get_zones_by_type(self, zone_type: ZoneType) -> list[ZoneDefinition]:
+        """Get all zones of a specific type."""
+        if self.zones is None:
+            return []
+        return [z for z in self.zones if z.zone_type == zone_type]
 
 
 # =============================================================================
