@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
@@ -16,23 +17,35 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { 
-  GitCompare, 
-  Filter, 
-  BarChart3, 
+import {
+  GitCompare,
+  Filter,
+  BarChart3,
   PieChart,
   RefreshCw,
-  X
+  X,
+  Star,
+  Save,
+  Trash2
 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface BenchmarkData {
   velocity_fidelity: VelocityData[];
@@ -101,6 +114,67 @@ export function BenchmarkComparison() {
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [selectedCircuits, setSelectedCircuits] = useState<string[]>([]);
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["greedy", "conservative", "adaptive"]);
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch favorites from backend
+  const loadFavorites = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/favorites/load");
+      if (response.ok) {
+        const favs = await response.json();
+        setFavorites(favs);
+      }
+    } catch (error) {
+      console.error("Error loading favorites:", error);
+    }
+  };
+
+  const handleSaveFavorite = async () => {
+    setIsSaving(true);
+    const config = {
+      name: `Favorito ${selectedBenchmark === "ancilla_vs_swap" ? "Ancilla" : "Cooling"} ${new Date().toLocaleTimeString()}`,
+      benchmark: selectedBenchmark,
+      circuits: selectedCircuits,
+      strategies: selectedStrategies,
+      chartType: chartType
+    };
+
+    try {
+      const response = await fetch("http://localhost:8000/api/favorites/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config)
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Configuración Guardada",
+          description: "Se ha añadido a tus favoritos",
+        });
+        loadFavorites();
+      }
+    } catch (error) {
+      toast({
+        title: "Error al guardar",
+        description: "No se pudo conectar con el servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const applyFavorite = (fav: any) => {
+    setSelectedBenchmark(fav.benchmark);
+    setSelectedCircuits(fav.circuits);
+    setSelectedStrategies(fav.strategies);
+    setChartType(fav.chartType);
+    toast({
+      title: "Configuración Cargada",
+      description: fav.name,
+    });
+  };
 
   // Fetch benchmark data
   useEffect(() => {
@@ -132,6 +206,7 @@ export function BenchmarkComparison() {
     };
 
     fetchData();
+    loadFavorites();
   }, []);
 
   // Filter data based on selections
@@ -208,7 +283,7 @@ export function BenchmarkComparison() {
           <BarChart data={filteredAncillaData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" />
             <XAxis dataKey="circuit" tick={{ fontSize: 12 }} />
-            <YAxis 
+            <YAxis
               label={{ value: "Profundidad", angle: -90, position: "insideLeft" }}
               tick={{ fontSize: 12 }}
             />
@@ -257,15 +332,14 @@ export function BenchmarkComparison() {
           {["greedy", "conservative", "adaptive"].map((strategy) => (
             <label
               key={strategy}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all ${
-                selectedStrategies.includes(strategy)
-                  ? strategy === "adaptive"
-                    ? "bg-success/10 border-success text-success"
-                    : strategy === "conservative"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all ${selectedStrategies.includes(strategy)
+                ? strategy === "adaptive"
+                  ? "bg-success/10 border-success text-success"
+                  : strategy === "conservative"
                     ? "bg-primary/10 border-primary text-primary"
                     : "bg-destructive/10 border-destructive text-destructive"
-                  : "bg-background border-border text-muted-foreground"
-              }`}
+                : "bg-background border-border text-muted-foreground"
+                }`}
             >
               <Checkbox
                 checked={selectedStrategies.includes(strategy)}
@@ -373,13 +447,12 @@ export function BenchmarkComparison() {
           return (
             <div
               key={strategy}
-              className={`p-4 rounded-lg border-2 ${
-                strategy === "adaptive"
-                  ? "border-success/50 bg-success/5"
-                  : strategy === "conservative"
+              className={`p-4 rounded-lg border-2 ${strategy === "adaptive"
+                ? "border-success/50 bg-success/5"
+                : strategy === "conservative"
                   ? "border-primary/50 bg-primary/5"
                   : "border-destructive/50 bg-destructive/5"
-              }`}
+                }`}
             >
               <p className="text-sm font-medium capitalize">{strategy}</p>
               <p className="text-2xl font-bold font-mono">{avg}%</p>
@@ -407,19 +480,70 @@ export function BenchmarkComparison() {
           </div>
         </div>
 
-        <Select value={selectedBenchmark} onValueChange={(v) => setSelectedBenchmark(v as BenchmarkType)}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Seleccionar benchmark" />
-          </SelectTrigger>
-          <SelectContent className="bg-background border border-border z-50">
-            {BENCHMARK_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          {favorites.length > 3 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Star className="w-4 h-4 mr-2" />
+                  Favoritos ({favorites.length})
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-background border border-border">
+                <DropdownMenuLabel>Cargar Configuración</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {favorites.map((fav) => (
+                  <DropdownMenuItem key={fav.id} onClick={() => applyFavorite(fav)}>
+                    <span className="truncate">{fav.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveFavorite}
+            disabled={isSaving}
+          >
+            {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Guardar
+          </Button>
+
+          <Select value={selectedBenchmark} onValueChange={(v) => setSelectedBenchmark(v as BenchmarkType)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Seleccionar benchmark" />
+            </SelectTrigger>
+            <SelectContent className="bg-background border border-border z-50">
+              {BENCHMARK_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {/* Favorites Quick List (if many) */}
+      {favorites.length > 0 && favorites.length <= 3 && (
+        <div className="flex flex-wrap gap-2 p-2 bg-muted/20 rounded-lg">
+          <span className="text-xs font-medium self-center px-2 text-muted-foreground flex items-center">
+            <Star className="w-3 h-3 mr-1" /> Favoritos:
+          </span>
+          {favorites.map((fav) => (
+            <Badge
+              key={fav.id}
+              variant="secondary"
+              className="cursor-pointer hover:bg-primary/20 transition-colors"
+              onClick={() => applyFavorite(fav)}
+            >
+              {fav.name}
+            </Badge>
+          ))}
+        </div>
+      )}
 
       {/* Loading State */}
       {isLoading ? (

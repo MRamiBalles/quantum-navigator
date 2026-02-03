@@ -1,9 +1,10 @@
+import * as React from "react";
 import { useState } from "react";
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Zap, 
-  Thermometer, 
+import {
+  BarChart3,
+  TrendingUp,
+  Zap,
+  Thermometer,
   Layers,
   Download,
   RefreshCw,
@@ -14,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { 
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -44,9 +45,37 @@ export function BenchmarkResults() {
   const [isRunning, setIsRunning] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleRunBenchmarks = () => {
+  const handleRunBenchmarks = async () => {
     setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 2000);
+    try {
+      const benchmarkType = BENCHMARK_MAP[activeTab] || "full";
+      const response = await fetch("http://localhost:8000/api/benchmarks/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ benchmark_type: benchmarkType })
+      });
+
+      if (!response.ok) throw new Error("Backend benchmark execution failed");
+
+      const result = await response.json();
+
+      toast({
+        title: "Benchmark Completado",
+        description: `Se han actualizado los resultados para: ${benchmarkType}`,
+      });
+
+      // In a real app, we would trigger a data refresh in the charts here
+      // For now, the charts fetch the latest JSON when they remount
+    } catch (error) {
+      console.error("Benchmark error:", error);
+      toast({
+        title: "Error de Ejecución",
+        description: "No se pudo conectar con el backend Python",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleExportCurrent = async () => {
@@ -105,9 +134,9 @@ export function BenchmarkResults() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleRunBenchmarks}
             disabled={isRunning}
           >
@@ -252,12 +281,12 @@ function SummaryCard({ icon: Icon, title, value, description, status }: SummaryC
         <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
           <Icon className="w-5 h-5 text-primary" />
         </div>
-        <Badge 
-          variant="outline" 
+        <Badge
+          variant="outline"
           className={
             status === "success" ? "text-success border-success/30" :
-            status === "warning" ? "text-warning border-warning/30" :
-            "text-destructive border-destructive/30"
+              status === "warning" ? "text-warning border-warning/30" :
+                "text-destructive border-destructive/30"
           }
         >
           {status === "success" ? "✓" : status === "warning" ? "⚠" : "✗"}
