@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Play, Pause, SkipBack, SkipForward, Zap, Waves } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Play, Pause, SkipBack, SkipForward, Zap, Waves, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -111,6 +111,8 @@ export function AnalogSequenceTimeline({
 }: AnalogSequenceTimelineProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
+    const animationRef = useRef<number | null>(null);
+    const lastTimeRef = useRef<number>(0);
 
     // Calculate the full waveform data
     const waveformData = useMemo(() => {
@@ -139,6 +141,47 @@ export function AnalogSequenceTimeline({
 
         return { omega, detuning, totalDuration };
     }, [sequence]);
+
+    // Playback animation loop
+    useEffect(() => {
+        if (!isPlaying) {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+                animationRef.current = null;
+            }
+            return;
+        }
+
+        lastTimeRef.current = performance.now();
+
+        const animate = (now: number) => {
+            const deltaMs = now - lastTimeRef.current;
+            lastTimeRef.current = now;
+
+            // Convert to nanoseconds (1ms = 1,000,000 ns, but we speed it up for visualization)
+            // Playback: 1 second real time = 1000ns simulation time (adjustable with speed)
+            const deltaNs = deltaMs * playbackSpeed;
+
+            const newTime = currentTime + deltaNs;
+
+            if (newTime >= waveformData.totalDuration) {
+                onCurrentTimeChange?.(waveformData.totalDuration);
+                setIsPlaying(false);
+                return;
+            }
+
+            onCurrentTimeChange?.(newTime);
+            animationRef.current = requestAnimationFrame(animate);
+        };
+
+        animationRef.current = requestAnimationFrame(animate);
+
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [isPlaying, playbackSpeed, currentTime, waveformData.totalDuration, onCurrentTimeChange]);
 
     // Generate SVG path from waveform
     const generatePath = (values: number[], maxValue: number, yOffset: number): string => {
@@ -375,24 +418,45 @@ export function AnalogSequenceTimeline({
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onCurrentTimeChange?.(0)}
+                        onClick={() => {
+                            setIsPlaying(false);
+                            onCurrentTimeChange?.(0);
+                        }}
                         disabled={readOnly}
+                        title="Reiniciar"
+                    >
+                        <RotateCcw className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onCurrentTimeChange?.(Math.max(0, currentTime - 100))}
+                        disabled={readOnly}
+                        title="Retroceder 100ns"
                     >
                         <SkipBack className="w-4 h-4" />
                     </Button>
                     <Button
                         size="sm"
                         variant={isPlaying ? "default" : "outline"}
-                        onClick={() => setIsPlaying(!isPlaying)}
+                        onClick={() => {
+                            if (currentTime >= waveformData.totalDuration) {
+                                onCurrentTimeChange?.(0);
+                            }
+                            setIsPlaying(!isPlaying);
+                        }}
                         disabled={readOnly}
+                        className={isPlaying ? "bg-success hover:bg-success/90" : ""}
+                        title={isPlaying ? "Pausar" : "Reproducir"}
                     >
                         {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </Button>
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onCurrentTimeChange?.(waveformData.totalDuration)}
+                        onClick={() => onCurrentTimeChange?.(Math.min(waveformData.totalDuration, currentTime + 100))}
                         disabled={readOnly}
+                        title="Avanzar 100ns"
                     >
                         <SkipForward className="w-4 h-4" />
                     </Button>
@@ -411,18 +475,30 @@ export function AnalogSequenceTimeline({
                             <option value={0.5}>0.5x</option>
                             <option value={1}>1x</option>
                             <option value={2}>2x</option>
+                            <option value={4}>4x</option>
                         </select>
                     </div>
 
-                    <Slider
-                        value={[currentTime]}
-                        onValueChange={(v) => onCurrentTimeChange?.(v[0])}
-                        min={0}
-                        max={waveformData.totalDuration}
-                        step={waveformData.totalDuration / 200}
-                        className="w-40"
-                        disabled={readOnly}
-                    />
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-muted-foreground">
+                            {currentTime.toFixed(0)}
+                        </span>
+                        <Slider
+                            value={[currentTime]}
+                            onValueChange={(v) => {
+                                setIsPlaying(false);
+                                onCurrentTimeChange?.(v[0]);
+                            }}
+                            min={0}
+                            max={waveformData.totalDuration}
+                            step={waveformData.totalDuration / 200}
+                            className="w-40"
+                            disabled={readOnly}
+                        />
+                        <span className="text-xs font-mono text-muted-foreground">
+                            {waveformData.totalDuration.toFixed(0)} ns
+                        </span>
+                    </div>
                 </div>
             </div>
 
