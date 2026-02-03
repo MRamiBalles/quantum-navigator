@@ -8,7 +8,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Atom
+  Atom,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,14 +18,15 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   status: "active" | "idle" | "warning";
+  badge?: string;
 }
 
 const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Activity, status: "active" },
-  { id: "routing", label: "Compilación & Routing", icon: Cpu, status: "active" },
-  { id: "qml", label: "Carga de Datos (QML)", icon: Database, status: "idle" },
-  { id: "qec", label: "Corrección de Errores", icon: Shield, status: "warning" },
-  { id: "pqc", label: "Criptografía PQC", icon: Lock, status: "idle" },
+  { id: "routing", label: "Orquestación Routing", icon: Cpu, status: "active", badge: "v2" },
+  { id: "qml", label: "Carga de Datos (ATP)", icon: Database, status: "idle" },
+  { id: "qec", label: "QEC (Stim)", icon: Shield, status: "warning" },
+  { id: "pqc", label: "Sandbox PQC", icon: Lock, status: "idle" },
 ];
 
 interface SidebarProps {
@@ -50,10 +52,23 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-lg font-semibold quantum-text">Q-Orchestrator</span>
-            <span className="text-xs text-muted-foreground font-mono">v1.0.0</span>
+            <span className="text-xs text-muted-foreground font-mono">Middle Layer v2.0</span>
           </div>
         )}
       </div>
+
+      {/* Architecture Badge */}
+      {!collapsed && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+          <div className="flex items-center gap-2 text-xs">
+            <Layers className="w-4 h-4 text-quantum-purple" />
+            <span className="font-medium">Arquitectura Agnóstica</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Orquestación sobre Qiskit/Pulser/Cirq
+          </p>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
@@ -89,14 +104,21 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
                 />
               </div>
               {!collapsed && (
-                <span 
-                  className={cn(
-                    "text-sm font-medium transition-colors",
-                    isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                <div className="flex items-center gap-2 flex-1">
+                  <span 
+                    className={cn(
+                      "text-sm font-medium transition-colors",
+                      isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                  {item.badge && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-quantum-purple/20 text-quantum-purple">
+                      {item.badge}
+                    </span>
                   )}
-                >
-                  {item.label}
-                </span>
+                </div>
               )}
             </button>
           );
