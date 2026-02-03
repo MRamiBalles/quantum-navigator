@@ -30,6 +30,7 @@ from pydantic import BaseModel, field_validator
 from optimizer import SpectralAODRouter
 from benchmarks.benchmark_qram import run_benchmark as run_qram_benchmark
 from benchmarks.benchmark_crypto import run_crypto_benchmark
+from benchmarks.qram_phononic import run_phononic_benchmark
 from exporters.bloqade import BloqadeExporter
 from exporters.openqasm3 import OpenQASM3Exporter
 
@@ -623,6 +624,17 @@ async def get_qram_benchmarks():
     except Exception as e:
         logger.error(f"QRAM benchmark failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/benchmarks/qram/phononic", dependencies=[Depends(verify_api_key_header)])
+async def get_phononic_qram_benchmarks():
+    """Returns Phononic QRAM vs Optical QRAM cost analysis data."""
+    try:
+        return run_phononic_benchmark()
+    except Exception as e:
+        logger.error(f"Phononic QRAM benchmark failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 class OptimizationRequest(BaseModel):
