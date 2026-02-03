@@ -26,12 +26,26 @@ export interface RegisterConfig {
   minAtomDistance: number;  // micrometers
   blockadeRadius: number;   // micrometers
   atoms: AtomPosition[];
+  zones?: ZoneDefinition[];  // Optional zones for zoned architecture (v2.1)
 }
 
 export interface ValidationError {
   type: "collision" | "blockade" | "bounds";
   atomIds: number[];
   message: string;
+}
+
+// Zone types for zoned architecture (v2.1)
+export type ZoneType = "STORAGE" | "ENTANGLEMENT" | "READOUT" | "BUFFER";
+
+export interface ZoneDefinition {
+  zone_id: string;
+  zone_type: ZoneType;
+  x_min: number;
+  x_max: number;
+  y_min: number;
+  y_max: number;
+  shielding_light?: boolean;
 }
 
 // =============================================================================
@@ -49,6 +63,14 @@ const ROLE_COLORS: Record<TrapRole, { fill: string; stroke: string; label: strin
   SLM: { fill: "#3b82f6", stroke: "#1d4ed8", label: "Data (SLM)" },
   AOD: { fill: "#f59e0b", stroke: "#d97706", label: "Shuttle (AOD)" },
   STORAGE: { fill: "#6b7280", stroke: "#4b5563", label: "Storage" },
+};
+
+// Zone colors for zoned architecture (v2.1)
+const ZONE_COLORS: Record<ZoneType, { fill: string; stroke: string; label: string }> = {
+  STORAGE: { fill: "rgba(99, 102, 241, 0.08)", stroke: "#6366f1", label: "Almacenamiento" },
+  ENTANGLEMENT: { fill: "rgba(16, 185, 129, 0.08)", stroke: "#10b981", label: "Entrelazamiento" },
+  READOUT: { fill: "rgba(245, 158, 11, 0.08)", stroke: "#f59e0b", label: "Lectura" },
+  BUFFER: { fill: "rgba(156, 163, 175, 0.05)", stroke: "#9ca3af", label: "Buffer" },
 };
 
 // =============================================================================
@@ -127,13 +149,13 @@ export function AtomRegisterEditor({
     blockadeRadius: BLOCKADE_RADIUS_DEFAULT,
     atoms: [],
   });
-  
+
   const [selectedAtom, setSelectedAtom] = useState<number | null>(null);
   const [showBlockade, setShowBlockade] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
   const [currentTool, setCurrentTool] = useState<"select" | "add-slm" | "add-aod">("select");
   const [isDragging, setIsDragging] = useState(false);
-  
+
   const canvasRef = useRef<SVGSVGElement>(null);
 
   // Derived state
@@ -149,24 +171,24 @@ export function AtomRegisterEditor({
   // Handlers
   const handleCanvasClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (readOnly) return;
-    
+
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
+
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
     const { x, y } = canvasToWorld(cx, cy);
-    
+
     if (currentTool === "add-slm" || currentTool === "add-aod") {
       const role: TrapRole = currentTool === "add-slm" ? "SLM" : "AOD";
-      const newId = config.atoms.length > 0 
-        ? Math.max(...config.atoms.map(a => a.id)) + 1 
+      const newId = config.atoms.length > 0
+        ? Math.max(...config.atoms.map(a => a.id)) + 1
         : 0;
-      
+
       // Snap to grid
       const snappedX = Math.round(x / GRID_STEP) * GRID_STEP;
       const snappedY = Math.round(y / GRID_STEP) * GRID_STEP;
-      
+
       const newAtom: AtomPosition = {
         id: newId,
         x: snappedX,
@@ -174,7 +196,7 @@ export function AtomRegisterEditor({
         role,
         ...(role === "AOD" ? { aod_row: 0, aod_col: config.atoms.filter(a => a.role === "AOD").length } : {}),
       };
-      
+
       setConfig(prev => ({
         ...prev,
         atoms: [...prev.atoms, newAtom],
@@ -193,11 +215,11 @@ export function AtomRegisterEditor({
 
   const handleAtomDrag = useCallback((atomId: number, dx: number, dy: number) => {
     if (readOnly) return;
-    
+
     setConfig(prev => ({
       ...prev,
-      atoms: prev.atoms.map(a => 
-        a.id === atomId 
+      atoms: prev.atoms.map(a =>
+        a.id === atomId
           ? { ...a, x: a.x + dx / SCALE, y: a.y - dy / SCALE }
           : a
       ),
@@ -206,7 +228,7 @@ export function AtomRegisterEditor({
 
   const handleDeleteSelected = useCallback(() => {
     if (selectedAtom === null || readOnly) return;
-    
+
     setConfig(prev => ({
       ...prev,
       atoms: prev.atoms.filter(a => a.id !== selectedAtom),
@@ -231,10 +253,10 @@ export function AtomRegisterEditor({
   // Render grid lines
   const renderGrid = () => {
     if (!showGrid) return null;
-    
+
     const lines = [];
     const gridSpacingPx = GRID_STEP * SCALE;
-    
+
     // Vertical lines
     for (let x = gridSpacingPx; x < CANVAS_WIDTH; x += gridSpacingPx) {
       lines.push(
@@ -249,7 +271,7 @@ export function AtomRegisterEditor({
         />
       );
     }
-    
+
     // Horizontal lines
     for (let y = gridSpacingPx; y < CANVAS_HEIGHT; y += gridSpacingPx) {
       lines.push(
@@ -264,7 +286,7 @@ export function AtomRegisterEditor({
         />
       );
     }
-    
+
     // Center axes
     lines.push(
       <line
@@ -288,18 +310,58 @@ export function AtomRegisterEditor({
         strokeDasharray="4 2"
       />
     );
-    
+
     return <g className="pointer-events-none">{lines}</g>;
+  };
+
+  // Render zones (v2.1 Zoned Architecture)
+  const renderZones = () => {
+    if (!config.zones || config.zones.length === 0) return null;
+
+    return config.zones.map(zone => {
+      const topLeft = worldToCanvas(zone.x_min, zone.y_max);
+      const bottomRight = worldToCanvas(zone.x_max, zone.y_min);
+      const width = bottomRight.cx - topLeft.cx;
+      const height = bottomRight.cy - topLeft.cy;
+      const style = ZONE_COLORS[zone.zone_type];
+
+      return (
+        <g key={`zone-${zone.zone_id}`}>
+          {/* Zone rectangle */}
+          <rect
+            x={topLeft.cx}
+            y={topLeft.cy}
+            width={width}
+            height={height}
+            fill={style.fill}
+            stroke={style.stroke}
+            strokeWidth={2}
+            strokeDasharray={zone.zone_type === "BUFFER" ? "8 4" : "none"}
+          />
+          {/* Zone label */}
+          <text
+            x={topLeft.cx + 8}
+            y={topLeft.cy + 16}
+            fill={style.stroke}
+            fontSize={11}
+            fontWeight="500"
+          >
+            {style.label}
+            {zone.shielding_light && " 🛡️"}
+          </text>
+        </g>
+      );
+    });
   };
 
   // Render blockade radii
   const renderBlockadeRadii = () => {
     if (!showBlockade) return null;
-    
+
     return config.atoms.map(atom => {
       const { cx, cy } = worldToCanvas(atom.x, atom.y);
       const radiusPx = config.blockadeRadius * SCALE;
-      
+
       return (
         <circle
           key={`blockade-${atom.id}`}
@@ -317,15 +379,15 @@ export function AtomRegisterEditor({
   // Render interaction lines
   const renderInteractions = () => {
     if (!showBlockade) return null;
-    
+
     return interactions.map(([id1, id2]) => {
       const a1 = config.atoms.find(a => a.id === id1);
       const a2 = config.atoms.find(a => a.id === id2);
       if (!a1 || !a2) return null;
-      
+
       const p1 = worldToCanvas(a1.x, a1.y);
       const p2 = worldToCanvas(a2.x, a2.y);
-      
+
       return (
         <line
           key={`interaction-${id1}-${id2}`}
@@ -347,7 +409,7 @@ export function AtomRegisterEditor({
       const roleStyle = ROLE_COLORS[atom.role];
       const isSelected = selectedAtom === atom.id;
       const hasError = errorAtomIds.has(atom.id);
-      
+
       return (
         <g
           key={`atom-${atom.id}`}
@@ -366,7 +428,7 @@ export function AtomRegisterEditor({
               strokeWidth={2}
             />
           )}
-          
+
           {/* Selection ring */}
           {isSelected && (
             <circle
@@ -377,7 +439,7 @@ export function AtomRegisterEditor({
               strokeDasharray="4 2"
             />
           )}
-          
+
           {/* Atom body */}
           <circle
             r={10}
@@ -385,12 +447,12 @@ export function AtomRegisterEditor({
             stroke={isSelected ? "#fff" : roleStyle.stroke}
             strokeWidth={2}
           />
-          
+
           {/* AOD indicator */}
           {atom.role === "AOD" && (
             <Move className="w-3 h-3 text-white" style={{ transform: "translate(-6px, -6px)" }} />
           )}
-          
+
           {/* ID label */}
           <text
             y={4}
@@ -419,7 +481,7 @@ export function AtomRegisterEditor({
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {errors.length > 0 && (
             <Badge variant="destructive" className="gap-1">
@@ -465,9 +527,9 @@ export function AtomRegisterEditor({
               AOD
             </Button>
           </div>
-          
+
           <div className="h-6 w-px bg-border" />
-          
+
           <Button
             size="sm"
             variant="ghost"
@@ -477,7 +539,7 @@ export function AtomRegisterEditor({
             <Trash2 className="w-4 h-4 mr-1" />
             Eliminar
           </Button>
-          
+
           <Button
             size="sm"
             variant="ghost"
@@ -503,19 +565,22 @@ export function AtomRegisterEditor({
         >
           {/* Background */}
           <rect width="100%" height="100%" className="fill-background" />
-          
+
           {/* Grid */}
           {renderGrid()}
-          
+
+          {/* Zones (v2.1 - behind everything) */}
+          {renderZones()}
+
           {/* Blockade radii (behind atoms) */}
           {renderBlockadeRadii()}
-          
+
           {/* Interaction lines */}
           {renderInteractions()}
-          
+
           {/* Atoms */}
           {renderAtoms()}
-          
+
           {/* Scale indicator */}
           <g transform={`translate(${CANVAS_WIDTH - 80}, ${CANVAS_HEIGHT - 20})`}>
             <line x1={0} y1={0} x2={5 * SCALE} y2={0} className="stroke-muted-foreground" strokeWidth={2} />
@@ -551,7 +616,7 @@ export function AtomRegisterEditor({
               onCheckedChange={setShowBlockade}
             />
           </div>
-          
+
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium">Mostrar Grid</label>
             <Switch
@@ -560,7 +625,7 @@ export function AtomRegisterEditor({
             />
           </div>
         </div>
-        
+
         {/* Right: Physics parameters */}
         <div className="space-y-4">
           <div className="space-y-2">
@@ -579,7 +644,7 @@ export function AtomRegisterEditor({
               disabled={readOnly}
             />
           </div>
-          
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Distancia Mínima</label>

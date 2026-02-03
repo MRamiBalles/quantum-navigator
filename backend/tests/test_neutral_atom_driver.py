@@ -282,6 +282,136 @@ class TestValidator:
 
 
 # =============================================================================
+# ZONE VALIDATION TESTS (v2.1)
+# =============================================================================
+
+class TestZoneValidation:
+    """Tests for zoned architecture validation (v2.1)."""
+    
+    def test_backward_compat_no_zones(self):
+        """Jobs without zones should still validate (backward compatible)."""
+        register = NeutralAtomRegister(
+            atoms=[
+                AtomPosition(id=0, x=0.0, y=0.0),
+                AtomPosition(id=1, x=6.0, y=0.0),
+            ],
+            zones=None  # No zones defined
+        )
+        job = NeutralAtomJob(
+            device=DeviceConfig(backend_id="simulator"),
+            register=register,
+            operations=[
+                GlobalPulse(
+                    start_time=0,
+                    omega=WaveformSpec(type=WaveformType.BLACKMAN, duration=1000, area=3.14159)
+                ),
+                Measurement(start_time=1100, atom_ids=[0, 1])
+            ]
+        )
+        
+        result = validate_job(job)
+        assert result.is_valid
+    
+    def test_pulse_in_storage_zone_warning(self):
+        """GlobalPulse on atoms in STORAGE zone should produce warning."""
+        from drivers.neutral_atom.schema import ZoneDefinition, ZoneType
+        
+        register = NeutralAtomRegister(
+            atoms=[
+                AtomPosition(id=0, x=0.0, y=0.0),
+                AtomPosition(id=1, x=6.0, y=0.0),
+            ],
+            zones=[
+                ZoneDefinition(
+                    zone_id="storage1",
+                    zone_type=ZoneType.STORAGE,
+                    x_min=-5.0, x_max=5.0,
+                    y_min=-5.0, y_max=5.0,
+                    shielding_light=False
+                )
+            ]
+        )
+        job = NeutralAtomJob(
+            device=DeviceConfig(backend_id="simulator"),
+            register=register,
+            operations=[
+                GlobalPulse(
+                    start_time=0,
+                    omega=WaveformSpec(type=WaveformType.BLACKMAN, duration=1000, area=3.14159)
+                ),
+                Measurement(start_time=1100, atom_ids=[0, 1])
+            ]
+        )
+        
+        result = validate_job(job)
+        assert result.is_valid  # Warnings don't fail validation
+        assert any(w.code == "PULSE_IN_STORAGE_ZONE" for w in result.warnings)
+    
+    def test_shielded_storage_high_severity_warning(self):
+        """Shielded storage zone should produce high-severity warning."""
+        from drivers.neutral_atom.schema import ZoneDefinition, ZoneType
+        
+        register = NeutralAtomRegister(
+            atoms=[
+                AtomPosition(id=0, x=0.0, y=0.0),
+            ],
+            zones=[
+                ZoneDefinition(
+                    zone_id="shielded",
+                    zone_type=ZoneType.STORAGE,
+                    x_min=-5.0, x_max=5.0,
+                    y_min=-5.0, y_max=5.0,
+                    shielding_light=True  # Shielded!
+                )
+            ]
+        )
+        job = NeutralAtomJob(
+            device=DeviceConfig(backend_id="simulator"),
+            register=register,
+            operations=[
+                GlobalPulse(
+                    start_time=0,
+                    omega=WaveformSpec(type=WaveformType.BLACKMAN, duration=1000, area=3.14159)
+                ),
+                Measurement(start_time=1100, atom_ids=[0])
+            ]
+        )
+        
+        result = validate_job(job)
+        shielded_warnings = [w for w in result.warnings if w.code == "PULSE_IN_SHIELDED_ZONE"]
+        assert len(shielded_warnings) == 1
+        assert shielded_warnings[0].severity == "high"
+    
+    def test_measurement_outside_readout_warning(self):
+        """Measurement outside READOUT zone should produce warning."""
+        from drivers.neutral_atom.schema import ZoneDefinition, ZoneType
+        
+        register = NeutralAtomRegister(
+            atoms=[
+                AtomPosition(id=0, x=0.0, y=0.0),  # Outside readout zone
+            ],
+            zones=[
+                ZoneDefinition(
+                    zone_id="readout1",
+                    zone_type=ZoneType.READOUT,
+                    x_min=10.0, x_max=20.0,  # Atom 0 is NOT in this zone
+                    y_min=-5.0, y_max=5.0
+                )
+            ]
+        )
+        job = NeutralAtomJob(
+            device=DeviceConfig(backend_id="simulator"),
+            register=register,
+            operations=[
+                Measurement(start_time=0, atom_ids=[0])
+            ]
+        )
+        
+        result = validate_job(job)
+        assert any(w.code == "MEASUREMENT_OUTSIDE_READOUT" for w in result.warnings)
+
+
+# =============================================================================
 # INTEGRATION TESTS (require Pulser)
 # =============================================================================
 

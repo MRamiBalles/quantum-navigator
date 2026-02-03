@@ -26,8 +26,12 @@ from .schema import (
     NeutralAtomRegister,
     AtomPosition,
     TrapRole,
+    ZoneType,
+    ZoneDefinition,
     ShuttleMove,
     RydbergGate,
+    GlobalPulse,
+    Measurement,
     NeutralAtomOperation,
 )
 
@@ -69,6 +73,15 @@ class BlockadeDistanceError(PhysicsConstraintError):
 
 class SlewRateError(PhysicsConstraintError):
     """Raised when pulse parameters change faster than AWG bandwidth allows."""
+    pass
+
+
+class ZoneViolationError(PhysicsConstraintError):
+    """
+    Raised when operation is attempted in the wrong zone type.
+    
+    E.g., Rydberg gate attempted in STORAGE zone (shielding light blocks pulses).
+    """
     pass
 
 
@@ -259,6 +272,20 @@ class PulserValidator:
             
         elif isinstance(op, RydbergGate):
             errs, warns = self._validate_rydberg_gate(
+                op, register, current_positions, op_index
+            )
+            errors.extend(errs)
+            warnings.extend(warns)
+        
+        elif isinstance(op, GlobalPulse):
+            errs, warns = self._validate_global_pulse_zones(
+                op, register, current_positions, op_index
+            )
+            errors.extend(errs)
+            warnings.extend(warns)
+        
+        elif isinstance(op, Measurement):
+            errs, warns = self._validate_measurement_zones(
                 op, register, current_positions, op_index
             )
             errors.extend(errs)
@@ -458,6 +485,107 @@ class PulserValidator:
             errors.append(CollisionError(
                 f"Atoms {op.control_atom} and {op.target_atom} too close for Rydberg gate: "
                 f"{dist:.2f} µm. Risk of atomic collision."
+            ))
+        
+        return errors, warnings
+    
+    def _validate_global_pulse_zones(
+        self,
+        op: GlobalPulse,
+        register: NeutralAtomRegister,
+        current_positions: dict[int, tuple[float, float]],
+        op_index: int
+    ) -> tuple[list[PhysicsConstraintError], list[ValidationWarning]]:
+        """
+        Validate GlobalPulse against zone constraints.
+        
+        Key check: If zones are defined, atoms in STORAGE zone will have
+        reduced fidelity or may fail due to shielding light.
+        """
+        errors = []
+        warnings = []
+        
+        # If no zones defined, skip zone validation (backward compatible)
+        if register.zones is None:
+            return errors, warnings
+        
+        # Check if any atoms are in storage zones
+        storage_zones = register.get_zones_by_type(ZoneType.STORAGE)
+        if not storage_zones:
+            return errors, warnings
+        
+        atoms_in_storage = []
+        for atom in register.atoms:
+            pos = current_positions.get(atom.id, (atom.x, atom.y))
+            zone = register.get_zone_at_position(pos[0], pos[1])
+            if zone and zone.zone_type == ZoneType.STORAGE:
+                atoms_in_storage.append(atom.id)
+        
+        if atoms_in_storage:
+            # Check if storage zone has shielding
+            shielded_atoms = []
+            for atom_id in atoms_in_storage:
+                pos = current_positions.get(atom_id)
+                if pos:
+                    zone = register.get_zone_at_position(pos[0], pos[1])
+                    if zone and zone.shielding_light:
+                        shielded_atoms.append(atom_id)
+            
+            if shielded_atoms:
+                warnings.append(ValidationWarning(
+                    code="PULSE_IN_SHIELDED_ZONE",
+                    message=f"GlobalPulse will have reduced fidelity on atoms {shielded_atoms} in shielded Storage zone",
+                    severity="high",
+                    operation_index=op_index
+                ))
+            else:
+                warnings.append(ValidationWarning(
+                    code="PULSE_IN_STORAGE_ZONE",
+                    message=f"GlobalPulse applied while atoms {atoms_in_storage} are in Storage zone (not shielded but may affect coherence)",
+                    severity="medium",
+                    operation_index=op_index
+                ))
+        
+        return errors, warnings
+    
+    def _validate_measurement_zones(
+        self,
+        op: Measurement,
+        register: NeutralAtomRegister,
+        current_positions: dict[int, tuple[float, float]],
+        op_index: int
+    ) -> tuple[list[PhysicsConstraintError], list[ValidationWarning]]:
+        """
+        Validate Measurement against zone constraints.
+        
+        Measurements should ideally occur in READOUT zones for best fidelity.
+        """
+        errors = []
+        warnings = []
+        
+        # If no zones defined, skip zone validation (backward compatible)
+        if register.zones is None:
+            return errors, warnings
+        
+        readout_zones = register.get_zones_by_type(ZoneType.READOUT)
+        if not readout_zones:
+            # No readout zones defined, measurements allowed anywhere
+            return errors, warnings
+        
+        atoms_outside_readout = []
+        for atom_id in op.atom_ids:
+            pos = current_positions.get(atom_id)
+            if pos:
+                zone = register.get_zone_at_position(pos[0], pos[1])
+                if zone is None or zone.zone_type != ZoneType.READOUT:
+                    atoms_outside_readout.append(atom_id)
+        
+        if atoms_outside_readout:
+            warnings.append(ValidationWarning(
+                code="MEASUREMENT_OUTSIDE_READOUT",
+                message=f"Atoms {atoms_outside_readout} measured outside READOUT zone - may have reduced fidelity or scatter light onto other atoms",
+                severity="medium",
+                operation_index=op_index
             ))
         
         return errors, warnings
