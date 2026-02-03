@@ -8,7 +8,8 @@ import {
   Download,
   RefreshCw,
   Infinity,
-  FileSpreadsheet
+  FileSpreadsheet,
+  GitCompare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +28,7 @@ import { AncillaVsSwapChart } from "./charts/AncillaVsSwapChart";
 import { CoolingStrategiesChart } from "./charts/CoolingStrategiesChart";
 import { ZonedCyclesChart } from "./charts/ZonedCyclesChart";
 import { SustainableDepthChart } from "./charts/SustainableDepthChart";
+import { BenchmarkComparison } from "./BenchmarkComparison";
 import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
 
 const BENCHMARK_MAP: Record<string, string> = {
@@ -180,7 +182,7 @@ export function BenchmarkResults() {
 
       {/* Benchmark Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+        <TabsList className="grid grid-cols-6 w-full max-w-4xl">
           <TabsTrigger value="velocity" className="gap-2">
             <TrendingUp className="w-4 h-4" />
             <span className="hidden sm:inline">Velocidad</span>
@@ -200,6 +202,10 @@ export function BenchmarkResults() {
           <TabsTrigger value="sustainable" className="gap-2">
             <Infinity className="w-4 h-4" />
             <span className="hidden sm:inline">Depth</span>
+          </TabsTrigger>
+          <TabsTrigger value="compare" className="gap-2">
+            <GitCompare className="w-4 h-4" />
+            <span className="hidden sm:inline">Comparar</span>
           </TabsTrigger>
         </TabsList>
 
@@ -221,6 +227,10 @@ export function BenchmarkResults() {
 
         <TabsContent value="sustainable" className="mt-6">
           <SustainableDepthChart />
+        </TabsContent>
+
+        <TabsContent value="compare" className="mt-6">
+          <BenchmarkComparison />
         </TabsContent>
       </Tabs>
     </div>
