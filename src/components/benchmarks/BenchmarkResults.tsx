@@ -40,6 +40,7 @@ import { TopologyOptimizer } from "./TopologyOptimizer";
 import { QMLResourceAnalysis } from "./QMLResourceAnalysis";
 import { CryptoResilience } from "./CryptoResilience";
 import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
+import { wsUrl, apiUrl, getApiKey, getApiHeaders } from "@/lib/api-config";
 
 const BENCHMARK_MAP: Record<string, string> = {
   velocity: "velocity_fidelity",
@@ -76,12 +77,12 @@ export function BenchmarkResults() {
   // Security: Token sent in first message (not URL) to avoid logging in proxies/browser history
   const connectWebSocket = useCallback(() => {
     const clientId = clientIdRef.current;
-    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}`);
+    const ws = new WebSocket(wsUrl(`/ws/benchmarks/${clientId}`));
 
     ws.onopen = () => {
       // SECURITY: First message must be authentication
       // In dev mode, backend accepts any token; in production, set VITE_QUANTUM_API_KEY
-      const apiKey = import.meta.env.VITE_QUANTUM_API_KEY || "dev-mode";
+      const apiKey = getApiKey();
       ws.send(JSON.stringify({ type: "auth", token: apiKey }));
     };
 
@@ -167,11 +168,9 @@ export function BenchmarkResults() {
   // Handle Stop Benchmarks
   const handleStopBenchmarks = async () => {
     try {
-      await fetch(`http://localhost:8000/ws/benchmarks/${clientIdRef.current}/stop`, {
+      await fetch(apiUrl(`/ws/benchmarks/${clientIdRef.current}/stop`), {
         method: "POST",
-        headers: {
-          "X-API-Key": "quantum-dev-key-2026"
-        }
+        headers: getApiHeaders(),
       });
     } catch (e) {
       console.error("Stop error:", e);
