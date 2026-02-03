@@ -33,6 +33,8 @@ from .schema import (
     GlobalPulse,
     Measurement,
     NeutralAtomOperation,
+    HeatingModel,
+    AtomLossModel,
 )
 
 
@@ -350,6 +352,47 @@ class PulserValidator:
                     code="HIGH_VELOCITY",
                     message=f"Atom {atom_id} moving at {velocity:.3f} µm/µs (>80% of limit)",
                     severity="medium",
+                    operation_index=op_index
+                ))
+            
+            # Calculate vibrational heating (v3.0)
+            delta_nvib = HeatingModel.calculate_nvib_increase(dist, velocity)
+            if delta_nvib > 18.0:  # Critical threshold
+                fidelity_loss = HeatingModel.estimate_fidelity_loss(delta_nvib)
+                warnings.append(ValidationWarning(
+                    code="HEATING_HIGH_NVIB",
+                    message=(
+                        f"High movement heating for atom {atom_id}: "
+                        f"Δn_vib = {delta_nvib:.1f} (>{HeatingModel().critical_nvib}). "
+                        f"Estimated fidelity loss: {fidelity_loss*100:.1f}%. "
+                        f"Consider increasing duration or reducing distance."
+                    ),
+                    severity="high",
+                    operation_index=op_index
+                ))
+            elif delta_nvib > 10.0:  # Warning threshold
+                fidelity_loss = HeatingModel.estimate_fidelity_loss(delta_nvib)
+                warnings.append(ValidationWarning(
+                    code="HEATING_MODERATE",
+                    message=(
+                        f"Moderate heating for atom {atom_id}: "
+                        f"Δn_vib = {delta_nvib:.1f}. "
+                        f"Estimated fidelity loss: {fidelity_loss*100:.1f}%."
+                    ),
+                    severity="medium",
+                    operation_index=op_index
+                ))
+            
+            # Check atom loss risk (v3.0)
+            p_loss = AtomLossModel.calculate_loss_probability(delta_nvib)
+            if p_loss > 0.05:  # >5% loss probability
+                warnings.append(ValidationWarning(
+                    code="ATOM_LOSS_RISK",
+                    message=(
+                        f"Atom {atom_id} has {p_loss*100:.1f}% loss probability "
+                        f"due to heating (n_vib = {delta_nvib:.1f})"
+                    ),
+                    severity="high" if p_loss > 0.1 else "medium",
                     operation_index=op_index
                 ))
             

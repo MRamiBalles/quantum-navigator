@@ -27,9 +27,19 @@ import math
 # =============================================================================
 
 class TrapRole(str, Enum):
-    """Role of atom trap in FPQA architecture."""
+    """
+    Role of atom trap in FPQA architecture.
+    
+    v3.0 Roles:
+    - SLM: Static data qubits (fixed position)
+    - AOD: Mobile shuttle qubits (general)
+    - BUS: Flying ancilla qubits - specialized AOD atoms that act as
+           entanglement messengers between fixed data qubits
+    - STORAGE: Atoms in storage zone (shielded)
+    """
     SLM = "SLM"       # Static Light Modulator - fixed data qubits
-    AOD = "AOD"       # Acousto-Optic Deflector - mobile shuttle qubits
+    AOD = "AOD"       # Acousto-Optic Deflector - mobile qubits
+    BUS = "BUS"       # Flying ancilla - entanglement messenger (v3.0)
     STORAGE = "STORAGE"  # Storage zone atoms
 
 
@@ -135,6 +145,113 @@ class ZoneDefinition(BaseModel):
     def contains_atom(self, atom: 'AtomPosition') -> bool:
         """Check if an atom is inside this zone."""
         return self.contains_point(atom.x, atom.y)
+
+
+class HeatingModel(BaseModel):
+    """
+    Vibrational heating model for AOD atom transport (v3.0).
+    
+    Based on Harvard/MIT 2025 continuous-operation research:
+    - Movement causes vibrational excitation (n_vib increase)
+    - Higher n_vib degrades two-qubit gate fidelity
+    - Critical threshold: n_vib > 18 causes significant fidelity loss
+    
+    Physics:
+        Δn_vib ∝ distance × velocity
+        F_2Q ≈ 1 - α × n_vib  (simplified linear model)
+    """
+    
+    # Heating coefficients (empirical from Harvard 2025)
+    heating_coefficient: float = Field(
+        default=0.01,
+        description="n_vib increase per µm×(µm/µs) - empirical factor"
+    )
+    
+    critical_nvib: float = Field(
+        default=18.0,
+        description="n_vib threshold above which fidelity loss is severe"
+    )
+    
+    fidelity_degradation_rate: float = Field(
+        default=0.008,
+        description="Fidelity loss per unit n_vib (F = 1 - α×n_vib)"
+    )
+    
+    @staticmethod
+    def calculate_nvib_increase(
+        distance_um: float,
+        velocity_um_per_us: float,
+        heating_coeff: float = 0.01
+    ) -> float:
+        """
+        Calculate vibrational number increase from movement.
+        
+        Args:
+            distance_um: Movement distance in micrometers
+            velocity_um_per_us: Movement velocity in µm/µs
+            heating_coeff: Empirical heating coefficient
+        
+        Returns:
+            Δn_vib: Increase in vibrational quantum number
+        """
+        return heating_coeff * distance_um * velocity_um_per_us
+    
+    @staticmethod
+    def estimate_fidelity_loss(
+        delta_nvib: float,
+        degradation_rate: float = 0.008
+    ) -> float:
+        """
+        Estimate gate fidelity loss from vibrational heating.
+        
+        Returns:
+            fidelity_loss: Fractional loss (0.0 to 1.0)
+        """
+        return min(1.0, degradation_rate * delta_nvib)
+
+
+class AtomLossModel(BaseModel):
+    """
+    Probabilistic atom loss model (v3.0).
+    
+    Atoms can be lost due to:
+    - Background gas collisions
+    - Excessive heating during transport
+    - Scattering from Rydberg light
+    """
+    
+    # Loss probability per movement
+    base_loss_rate: float = Field(
+        default=0.001,
+        description="Base probability of atom loss per shuttle operation"
+    )
+    
+    heating_loss_factor: float = Field(
+        default=0.005,
+        description="Additional loss probability per unit n_vib above threshold"
+    )
+    
+    @staticmethod
+    def calculate_loss_probability(
+        nvib: float,
+        nvib_threshold: float = 18.0,
+        base_rate: float = 0.001,
+        heating_factor: float = 0.005
+    ) -> float:
+        """
+        Calculate atom loss probability.
+        
+        Args:
+            nvib: Current vibrational number
+            nvib_threshold: n_vib above which heating contributes to loss
+            base_rate: Base loss probability
+            heating_factor: Additional loss per unit n_vib above threshold
+        
+        Returns:
+            p_loss: Probability of atom loss (0.0 to 1.0)
+        """
+        excess_nvib = max(0, nvib - nvib_threshold)
+        return min(1.0, base_rate + heating_factor * excess_nvib)
 
 
 class NeutralAtomRegister(BaseModel):
