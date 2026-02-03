@@ -665,6 +665,28 @@ async def get_qram_analysis(
         logger.error(f"QRAM benchmark failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================================
+# Cryptographic Resilience Endpoint
+# ============================================================================
+
+from benchmarks.benchmark_crypto import run_crypto_benchmark
+
+@app.get("/api/benchmarks/crypto")
+async def get_crypto_analysis(
+    req: Request,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Returns estimated resources to break RSA/ECC vs PQC resilience.
+    """
+    await check_rate_limit(req, "benchmarks")
+    try:
+        data = run_crypto_benchmark()
+        return data
+    except Exception as e:
+        logger.error(f"Crypto benchmark failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -15,7 +15,8 @@ import {
   Activity,
   Atom,
   StopCircle,
-  LayoutGrid
+  LayoutGrid,
+  ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +38,7 @@ import { SustainableDepthChart } from "./charts/SustainableDepthChart";
 import { BenchmarkComparison } from "./BenchmarkComparison";
 import { TopologyOptimizer } from "./TopologyOptimizer";
 import { QMLResourceAnalysis } from "./QMLResourceAnalysis";
+import { CryptoResilience } from "./CryptoResilience";
 import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
 
 const BENCHMARK_MAP: Record<string, string> = {
@@ -407,6 +409,10 @@ export function BenchmarkResults() {
             <Activity className="w-4 h-4" />
             <span className="hidden sm:inline">QML/QRAM</span>
           </TabsTrigger>
+          <TabsTrigger value="crypto" className="gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            <span className="hidden sm:inline">Security</span>
+          </TabsTrigger>
           <TabsTrigger value="compare" className="gap-2">
             <GitCompare className="w-4 h-4" />
             <span className="hidden sm:inline">Comparar</span>
@@ -439,6 +445,10 @@ export function BenchmarkResults() {
 
         <TabsContent value="qml" className="mt-6">
           <QMLResourceAnalysis />
+        </TabsContent>
+
+        <TabsContent value="crypto" className="mt-6">
+          <CryptoResilience />
         </TabsContent>
 
         <TabsContent value="compare" className="mt-6">
