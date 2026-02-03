@@ -35,6 +35,7 @@ from .schema import (
     NeutralAtomOperation,
     HeatingModel,
     AtomLossModel,
+    ReloadOperation,  # v4.0
 )
 
 

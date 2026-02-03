@@ -490,6 +490,99 @@ class ShieldingEvent(BaseModel):
     mode: Literal["activate", "deactivate"] = Field(default="activate")
 
 
+class ReloadOperation(BaseModel):
+    """
+    Atom replenishment operation for continuous operation (v4.0).
+    
+    Based on Harvard/MIT/QuEra Nature 2025 continuous-operation processor:
+    - Atoms are periodically loaded from reservoir to replace lost qubits
+    - Replenishment rate: ~30,000 qubits/second
+    - Fresh atoms are moved from Reservoir → Preparation → Storage zones
+    
+    This operation models the "replenishment cycle" that enables
+    arbitrarily long quantum computations without qubit exhaustion.
+    """
+    op_type: Literal["reload"] = "reload"
+    start_time: float = Field(..., ge=0, description="Start time in ns")
+    
+    # Target slots for replenishment
+    target_slots: list[int] = Field(
+        ..., 
+        min_length=1,
+        description="Atom slot IDs to replenish (must be empty or lost atoms)"
+    )
+    
+    # Source zone (typically reservoir or preparation)
+    source_zone: str = Field(
+        default="reservoir",
+        description="Zone from which fresh atoms are loaded"
+    )
+    
+    # Timing parameters
+    loading_duration_ns: float = Field(
+        default=50_000.0,  # 50 µs typical loading time
+        gt=0,
+        description="Time to load and transport fresh atom"
+    )
+    
+    # Cooling after reload
+    post_cooling: bool = Field(
+        default=True,
+        description="Apply cooling before computation (resets n_vib)"
+    )
+    
+    @property
+    def replenishment_rate_per_second(self) -> float:
+        """Calculate replenishment rate based on loading duration."""
+        return 1e9 / self.loading_duration_ns  # atoms/second
+
+
+class ContinuousOperationConfig(BaseModel):
+    """
+    Configuration for continuous operation mode (v4.0).
+    
+    Enables arbitrarily long computations by:
+    - Tracking atom survival across operations
+    - Scheduling automatic replenishment when atoms are lost
+    - Managing reservoir depletion
+    
+    Reference: Nature 2025 - 3,000 qubit continuous operation
+    """
+    enabled: bool = Field(
+        default=False,
+        description="Enable continuous operation mode"
+    )
+    
+    # Reservoir parameters
+    reservoir_size: int = Field(
+        default=300_000,
+        ge=1000,
+        description="Total atoms available in reservoir"
+    )
+    
+    replenishment_rate: float = Field(
+        default=30_000.0,
+        gt=0,
+        description="Atoms replenished per second"
+    )
+    
+    # Automatic reload triggers
+    auto_reload_threshold: float = Field(
+        default=0.05,
+        ge=0.01,
+        le=0.5,
+        description="Trigger reload when atom loss probability > threshold"
+    )
+    
+    # Sustainable depth calculation
+    target_fidelity: float = Field(
+        default=0.90,
+        ge=0.5,
+        le=0.99,
+        description="Target cumulative fidelity for sustainable operation"
+    )
+
+
 # Union type for all operations
 NeutralAtomOperation = Union[
     GlobalPulse,
@@ -497,7 +590,8 @@ NeutralAtomOperation = Union[
     ShuttleMove,
     RydbergGate,
     Measurement,
-    ShieldingEvent
+    ShieldingEvent,
+    ReloadOperation  # v4.0: Continuous operation
 ]
 
 
@@ -634,6 +728,134 @@ def create_example_job() -> NeutralAtomJob:
             compute_energy=True
         )
     )
+
+
+# =============================================================================
+# SUSTAINABLE DEPTH ANALYSIS (v4.0)
+# =============================================================================
+
+class SustainableDepthAnalysis(BaseModel):
+    """
+    Predicts sustainable circuit depth before atom replenishment is required.
+    
+    Based on HeatingModel and AtomLossModel, calculates:
+    - Maximum gates before cumulative fidelity drops below threshold
+    - Time until atom loss probability exceeds safety limit
+    - Required replenishment rate for target depth
+    
+    This metric is critical for designing long-running algorithms
+    like quantum error correction and variational optimization.
+    """
+    
+    # Input parameters
+    avg_transport_distance_um: float = Field(
+        default=15.0,
+        gt=0,
+        description="Average atom transport distance per gate layer"
+    )
+    
+    transport_velocity_um_per_us: float = Field(
+        default=0.40,
+        gt=0,
+        le=0.55,
+        description="Transport velocity (should be below thermal limit)"
+    )
+    
+    gate_time_ns: float = Field(
+        default=1000.0,
+        gt=0,
+        description="Average two-qubit gate duration"
+    )
+    
+    num_data_qubits: int = Field(
+        default=100,
+        ge=1,
+        description="Number of data qubits in computation"
+    )
+    
+    # Thresholds
+    fidelity_threshold: float = Field(
+        default=0.90,
+        ge=0.5,
+        le=0.99,
+        description="Minimum acceptable cumulative fidelity"
+    )
+    
+    loss_threshold: float = Field(
+        default=0.10,
+        ge=0.01,
+        le=0.5,
+        description="Maximum acceptable atom loss probability"
+    )
+    
+    def calculate_sustainable_depth(self) -> dict:
+        """
+        Calculate sustainable circuit depth metrics.
+        
+        Returns:
+            dict with:
+                - max_layers_fidelity: Layers before fidelity drops below threshold
+                - max_layers_loss: Layers before loss probability exceeds threshold
+                - sustainable_depth: min(max_layers_fidelity, max_layers_loss)
+                - time_to_replacement_ms: Time before replenishment needed
+                - required_replenishment_rate: Atoms/second needed for indefinite operation
+        """
+        from .schema import HeatingModel, AtomLossModel
+        
+        # Calculate heating per layer
+        delta_nvib_per_layer = HeatingModel.calculate_nvib_increase(
+            self.avg_transport_distance_um,
+            self.transport_velocity_um_per_us
+        )
+        
+        # Calculate layers until fidelity threshold
+        # F_cumulative = (1 - alpha * delta_nvib)^n_layers
+        # Solve for n when F_cumulative = fidelity_threshold
+        alpha = 0.008  # Fidelity degradation rate
+        fidelity_loss_per_layer = alpha * delta_nvib_per_layer
+        
+        if fidelity_loss_per_layer > 0:
+            import math
+            max_layers_fidelity = int(
+                math.log(self.fidelity_threshold) / 
+                math.log(1 - fidelity_loss_per_layer)
+            )
+        else:
+            max_layers_fidelity = float('inf')
+        
+        # Calculate layers until loss threshold
+        # P_loss_cumulative increases with n_vib
+        # Simplified: find layer where P_loss > loss_threshold
+        nvib_for_loss = 18.0 + (self.loss_threshold - 0.001) / 0.005
+        max_layers_loss = int(nvib_for_loss / delta_nvib_per_layer) if delta_nvib_per_layer > 0 else float('inf')
+        
+        # Sustainable depth is the minimum
+        sustainable_depth = min(max_layers_fidelity, max_layers_loss)
+        
+        # Time calculation
+        layer_time_ns = (
+            self.avg_transport_distance_um / self.transport_velocity_um_per_us * 1000 +
+            self.gate_time_ns
+        )
+        time_to_replacement_ms = (sustainable_depth * layer_time_ns) / 1_000_000
+        
+        # Required replenishment rate for indefinite operation
+        p_loss_at_depth = AtomLossModel.calculate_loss_probability(
+            sustainable_depth * delta_nvib_per_layer
+        )
+        atoms_lost_per_cycle = self.num_data_qubits * p_loss_at_depth
+        cycle_time_s = time_to_replacement_ms / 1000
+        required_rate = atoms_lost_per_cycle / cycle_time_s if cycle_time_s > 0 else 0
+        
+        return {
+            'max_layers_fidelity': max_layers_fidelity,
+            'max_layers_loss': max_layers_loss,
+            'sustainable_depth': sustainable_depth,
+            'time_to_replacement_ms': time_to_replacement_ms,
+            'required_replenishment_rate': required_rate,
+            'delta_nvib_per_layer': delta_nvib_per_layer,
+            'layer_time_ns': layer_time_ns
+        }
 
 
 if __name__ == "__main__":
