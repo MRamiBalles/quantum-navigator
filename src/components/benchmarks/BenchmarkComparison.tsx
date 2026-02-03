@@ -120,7 +120,11 @@ export function BenchmarkComparison() {
   // Fetch favorites from backend
   const loadFavorites = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/favorites/load");
+      const response = await fetch("http://localhost:8000/api/favorites/load", {
+        headers: {
+          "X-API-Key": "quantum-dev-key-2026"
+        }
+      });
       if (response.ok) {
         const favs = await response.json();
         setFavorites(favs);
@@ -143,7 +147,10 @@ export function BenchmarkComparison() {
     try {
       const response = await fetch("http://localhost:8000/api/favorites/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": "quantum-dev-key-2026"
+        },
         body: JSON.stringify(config)
       });
 

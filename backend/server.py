@@ -474,7 +474,10 @@ async def websocket_benchmark(websocket: WebSocket, client_id: str, token: Optio
         manager.disconnect(client_id)
 
 @app.post("/ws/benchmarks/{client_id}/stop")
-async def stop_benchmark(client_id: str):
+async def stop_benchmark(
+    client_id: str,
+    api_key: str = Depends(verify_api_key)
+):
     """Stop a running benchmark via HTTP POST."""
     # Validate client_id format
     if not re.match(r'^[a-zA-Z0-9_\-]{1,64}$', client_id):
@@ -492,9 +495,9 @@ async def run_benchmark(
     """
     Executes a benchmark script and returns the result.
     For real-time updates, use the WebSocket endpoint instead.
-    
-    Note: benchmark_type is validated by Pydantic model before reaching this handler.
     """
+    # Check rate limit (5 req/min)
+    await check_rate_limit(http_request, "benchmarks")
     # benchmark_type is already validated by Pydantic validator
     benchmark_type = request.benchmark_type
     
@@ -550,6 +553,8 @@ async def load_favorites(
     request: Request,
     api_key: str = Depends(verify_api_key)
 ):
+    # Check rate limit (30 req/min)
+    await check_rate_limit(request, "favorites")
     if not os.path.exists(FAVORITES_FILE):
         return []
     try:
@@ -566,6 +571,8 @@ async def save_favorite(
     api_key: str = Depends(verify_api_key)
 ):
     """Save a comparison configuration to favorites."""
+    # Check rate limit (30 req/min)
+    await check_rate_limit(request, "favorites")
     favorites = await load_favorites()
     
     # Limit total favorites to prevent DoS

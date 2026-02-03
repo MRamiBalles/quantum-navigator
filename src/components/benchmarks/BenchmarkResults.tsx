@@ -70,7 +70,9 @@ export function BenchmarkResults() {
   // WebSocket Connection Handler
   const connectWebSocket = useCallback(() => {
     const clientId = clientIdRef.current;
-    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}`);
+    // Security: Include API key in WebSocket query param
+    const apiKey = "quantum-dev-key-2026";
+    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}?token=${apiKey}`);
 
     ws.onopen = () => {
       setWsStatus("connected");
@@ -108,7 +110,7 @@ export function BenchmarkResults() {
       setIsRunning(false);
       toast({
         title: "Error de Conexión",
-        description: "No se pudo conectar al servidor WebSocket",
+        description: "Fallo de autenticación o límite de tasa excedido (401/429)",
         variant: "destructive",
       });
     };
@@ -133,7 +135,10 @@ export function BenchmarkResults() {
   const handleStopBenchmarks = async () => {
     try {
       await fetch(`http://localhost:8000/ws/benchmarks/${clientIdRef.current}/stop`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "X-API-Key": "quantum-dev-key-2026"
+        }
       });
     } catch (e) {
       console.error("Stop error:", e);
