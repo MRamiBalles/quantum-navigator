@@ -51,7 +51,7 @@ const BENCHMARK_MAP: Record<string, string> = {
 
 // WebSocket Telemetry Interface (Harvard/QuEra 2025)
 interface TelemetryPayload {
-  status: "CONNECTING" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR";
+  status: "CONNECTING" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR" | "AUTH_REQUIRED";
   percentage: number;
   cycle: number;
   atoms_lost: number;
@@ -72,22 +72,43 @@ export function BenchmarkResults() {
   const wsRef = useRef<WebSocket | null>(null);
   const clientIdRef = useRef<string>(`gui_${Date.now()}`);
 
-  // WebSocket Connection Handler
+  // WebSocket Connection Handler with first-message authentication
+  // Security: Token sent in first message (not URL) to avoid logging in proxies/browser history
   const connectWebSocket = useCallback(() => {
     const clientId = clientIdRef.current;
-    // Security: Include API key in WebSocket query param
-    const apiKey = "quantum-dev-key-2026";
-    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}?token=${apiKey}`);
+    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}`);
 
     ws.onopen = () => {
-      setWsStatus("connected");
-      // Send start command
-      const benchmarkType = BENCHMARK_MAP[activeTab] || "velocity_fidelity";
-      ws.send(JSON.stringify({ benchmark_type: benchmarkType, cycles: 50 }));
+      // SECURITY: First message must be authentication
+      // In dev mode, backend accepts any token; in production, set VITE_QUANTUM_API_KEY
+      const apiKey = import.meta.env.VITE_QUANTUM_API_KEY || "dev-mode";
+      ws.send(JSON.stringify({ type: "auth", token: apiKey }));
     };
 
+    // Handle auth response and then send benchmark command
+    let authenticated = false;
+    const originalOnMessage = ws.onmessage;
     ws.onmessage = (event) => {
       const data: TelemetryPayload = JSON.parse(event.data);
+      
+      // First response after auth - check status
+      if (!authenticated) {
+        if (data.status === "AUTH_REQUIRED" || (data.status === "ERROR" && data.cycle === 0)) {
+          setWsStatus("error");
+          toast({
+            title: "Error de Autenticación",
+            description: "Token de API inválido o ausente",
+            variant: "destructive"
+          });
+          return;
+        }
+        authenticated = true;
+        setWsStatus("connected");
+        // Send benchmark command after successful auth
+        const benchmarkType = BENCHMARK_MAP[activeTab] || "velocity_fidelity";
+        ws.send(JSON.stringify({ benchmark_type: benchmarkType, cycles: 50 }));
+      }
+      
       setTelemetry(data);
 
       // Check for decoder backlog "Death Point" (>20ms cycle time)
