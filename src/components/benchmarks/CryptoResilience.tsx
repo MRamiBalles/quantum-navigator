@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldAlert, ShieldCheck, Lock, Unlock, Calendar, AlertTriangle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { apiUrl, getApiHeaders } from "@/lib/api-config";
 
 export function CryptoResilience() {
     const [data, setData] = useState<any[]>([]);
@@ -15,10 +16,8 @@ export function CryptoResilience() {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const response = await fetch(`http://localhost:8000/api/benchmarks/crypto?year=${year}`, {
-                    headers: {
-                        "X-API-Key": "quantum-dev-key-2026"
-                    }
+                const response = await fetch(apiUrl(`/api/benchmarks/crypto?year=${year}`), {
+                    headers: getApiHeaders(),
                 });
                 if (response.ok) {
                     const result = await response.json();

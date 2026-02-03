@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Database, TrendingUp, AlertTriangle } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { apiUrl, getApiHeaders } from "@/lib/api-config";
 
 export function QMLResourceAnalysis() {
     const [data, setData] = useState<any[]>([]);
@@ -11,10 +12,8 @@ export function QMLResourceAnalysis() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch("http://localhost:8000/api/benchmarks/qram", {
-                    headers: {
-                        "X-API-Key": "quantum-dev-key-2026"
-                    }
+                const response = await fetch(apiUrl("/api/benchmarks/qram"), {
+                    headers: getApiHeaders(),
                 });
                 if (response.ok) {
                     const result = await response.json();

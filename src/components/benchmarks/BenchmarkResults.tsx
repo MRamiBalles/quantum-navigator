@@ -40,6 +40,7 @@ import { TopologyOptimizer } from "./TopologyOptimizer";
 import { QMLResourceAnalysis } from "./QMLResourceAnalysis";
 import { CryptoResilience } from "./CryptoResilience";
 import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
+import { wsUrl, apiUrl, getApiKey, getApiHeaders } from "@/lib/api-config";
 
 const BENCHMARK_MAP: Record<string, string> = {
   velocity: "velocity_fidelity",
@@ -51,7 +52,7 @@ const BENCHMARK_MAP: Record<string, string> = {
 
 // WebSocket Telemetry Interface (Harvard/QuEra 2025)
 interface TelemetryPayload {
-  status: "CONNECTING" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR";
+  status: "CONNECTING" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR" | "AUTH_REQUIRED";
   percentage: number;
   cycle: number;
   atoms_lost: number;
@@ -72,22 +73,43 @@ export function BenchmarkResults() {
   const wsRef = useRef<WebSocket | null>(null);
   const clientIdRef = useRef<string>(`gui_${Date.now()}`);
 
-  // WebSocket Connection Handler
+  // WebSocket Connection Handler with first-message authentication
+  // Security: Token sent in first message (not URL) to avoid logging in proxies/browser history
   const connectWebSocket = useCallback(() => {
     const clientId = clientIdRef.current;
-    // Security: Include API key in WebSocket query param
-    const apiKey = "quantum-dev-key-2026";
-    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}?token=${apiKey}`);
+    const ws = new WebSocket(wsUrl(`/ws/benchmarks/${clientId}`));
 
     ws.onopen = () => {
-      setWsStatus("connected");
-      // Send start command
-      const benchmarkType = BENCHMARK_MAP[activeTab] || "velocity_fidelity";
-      ws.send(JSON.stringify({ benchmark_type: benchmarkType, cycles: 50 }));
+      // SECURITY: First message must be authentication
+      // In dev mode, backend accepts any token; in production, set VITE_QUANTUM_API_KEY
+      const apiKey = getApiKey();
+      ws.send(JSON.stringify({ type: "auth", token: apiKey }));
     };
 
+    // Handle auth response and then send benchmark command
+    let authenticated = false;
+    const originalOnMessage = ws.onmessage;
     ws.onmessage = (event) => {
       const data: TelemetryPayload = JSON.parse(event.data);
+      
+      // First response after auth - check status
+      if (!authenticated) {
+        if (data.status === "AUTH_REQUIRED" || (data.status === "ERROR" && data.cycle === 0)) {
+          setWsStatus("error");
+          toast({
+            title: "Error de Autenticación",
+            description: "Token de API inválido o ausente",
+            variant: "destructive"
+          });
+          return;
+        }
+        authenticated = true;
+        setWsStatus("connected");
+        // Send benchmark command after successful auth
+        const benchmarkType = BENCHMARK_MAP[activeTab] || "velocity_fidelity";
+        ws.send(JSON.stringify({ benchmark_type: benchmarkType, cycles: 50 }));
+      }
+      
       setTelemetry(data);
 
       // Check for decoder backlog "Death Point" (>20ms cycle time)
@@ -146,11 +168,9 @@ export function BenchmarkResults() {
   // Handle Stop Benchmarks
   const handleStopBenchmarks = async () => {
     try {
-      await fetch(`http://localhost:8000/ws/benchmarks/${clientIdRef.current}/stop`, {
+      await fetch(apiUrl(`/ws/benchmarks/${clientIdRef.current}/stop`), {
         method: "POST",
-        headers: {
-          "X-API-Key": "quantum-dev-key-2026"
-        }
+        headers: getApiHeaders(),
       });
     } catch (e) {
       console.error("Stop error:", e);

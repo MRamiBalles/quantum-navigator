@@ -46,6 +46,7 @@ import {
   Trash2
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { apiUrl, getApiHeaders } from "@/lib/api-config";
 
 interface BenchmarkData {
   velocity_fidelity: VelocityData[];
@@ -120,10 +121,8 @@ export function BenchmarkComparison() {
   // Fetch favorites from backend
   const loadFavorites = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/favorites/load", {
-        headers: {
-          "X-API-Key": "quantum-dev-key-2026"
-        }
+      const response = await fetch(apiUrl("/api/favorites/load"), {
+        headers: getApiHeaders(),
       });
       if (response.ok) {
         const favs = await response.json();
@@ -145,13 +144,10 @@ export function BenchmarkComparison() {
     };
 
     try {
-      const response = await fetch("http://localhost:8000/api/favorites/save", {
+      const response = await fetch(apiUrl("/api/favorites/save"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": "quantum-dev-key-2026"
-        },
-        body: JSON.stringify(config)
+        headers: getApiHeaders(),
+        body: JSON.stringify(config),
       });
 
       if (response.ok) {

@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Zap, ArrowRight, LayoutGrid, Thermometer } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { apiUrl, getApiHeaders } from "@/lib/api-config";
 
 interface OptimizationResult {
     initial_cost: number;
@@ -21,18 +22,15 @@ export function TopologyOptimizer() {
     const handleOptimize = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch("http://localhost:8000/api/topology/optimize", {
+            const response = await fetch(apiUrl("/api/topology/optimize"), {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-API-Key": "quantum-dev-key-2026"
-                },
+                headers: getApiHeaders(),
                 body: JSON.stringify({
                     num_qubits: 50,
                     num_gates: 250,
                     width: 20,
                     height: 20
-                })
+                }),
             });
 
             if (response.ok) {
