@@ -70,6 +70,8 @@ const ZONE_COLORS: Record<ZoneType, { fill: string; stroke: string; label: strin
   STORAGE: { fill: "rgba(99, 102, 241, 0.08)", stroke: "#6366f1", label: "Almacenamiento" },
   ENTANGLEMENT: { fill: "rgba(16, 185, 129, 0.08)", stroke: "#10b981", label: "Entrelazamiento" },
   READOUT: { fill: "rgba(245, 158, 11, 0.08)", stroke: "#f59e0b", label: "Lectura" },
+  PREPARATION: { fill: "rgba(6, 182, 212, 0.08)", stroke: "#06b6d4", label: "Preparación (MOT)" },
+  RESERVOIR: { fill: "rgba(55, 65, 81, 0.12)", stroke: "#374151", label: "Reservorio" },
   BUFFER: { fill: "rgba(156, 163, 175, 0.05)", stroke: "#9ca3af", label: "Buffer" },
 };
 
