@@ -9,7 +9,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Atom,
-  Layers
+  Layers,
+  BarChart3,
+  FlaskConical
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +25,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Activity, status: "active" },
+  { id: "neutral-atom", label: "Neutral Atom Studio", icon: Atom, status: "active", badge: "FPQA" },
+  { id: "benchmarks", label: "Benchmark Results", icon: BarChart3, status: "active", badge: "4" },
   { id: "routing", label: "Orquestación Routing", icon: Cpu, status: "active", badge: "v2" },
   { id: "qml", label: "Carga de Datos (ATP)", icon: Database, status: "idle" },
   { id: "qec", label: "QEC (Stim)", icon: Shield, status: "warning" },
