@@ -2,6 +2,7 @@
 Quantum Navigator Backend API - v4.0
 =====================================
 FastAPI server with WebSocket support for real-time benchmark telemetry.
+Includes API key authentication and rate limiting for security.
 
 MIT License (c) 2026 Harvard/MIT Quantum Computing Research
 """
@@ -15,12 +16,18 @@ import asyncio
 import logging
 import random
 import uuid
+import time
+import secrets
 from typing import List, Optional, Dict, Any, Set
 from datetime import datetime
+from collections import defaultdict
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Query, Request
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
+from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_429_TOO_MANY_REQUESTS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,8 +39,90 @@ app = FastAPI(title="Quantum Navigator Backend API", version="4.0")
 # Security Configuration
 # ============================================================================
 
+# API Key Authentication
+API_KEY_NAME = "X-API-Key"
+API_KEY = os.getenv("QUANTUM_API_KEY", "quantum-dev-key-2026")  # Change in production!
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def verify_api_key(api_key: Optional[str] = Depends(api_key_header)) -> str:
+    """Verify API key from header. Raises 401 if invalid."""
+    if not api_key or not secrets.compare_digest(api_key, API_KEY):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": API_KEY_NAME}
+        )
+    return api_key
+
+# ============================================================================
+# Rate Limiting (In-Memory)
+# ============================================================================
+
+class RateLimiter:
+    """Simple in-memory rate limiter using sliding window."""
+    
+    def __init__(self):
+        self.requests: Dict[str, List[float]] = defaultdict(list)
+    
+    def is_allowed(self, client_id: str, limit: int, window_seconds: int) -> bool:
+        """Check if request is allowed for client within rate limit window."""
+        now = time.time()
+        window_start = now - window_seconds
+        
+        # Clean old requests
+        self.requests[client_id] = [
+            ts for ts in self.requests[client_id] if ts > window_start
+        ]
+        
+        # Check limit
+        if len(self.requests[client_id]) >= limit:
+            return False
+        
+        # Record this request
+        self.requests[client_id].append(now)
+        return True
+    
+    def get_retry_after(self, client_id: str, window_seconds: int) -> int:
+        """Get seconds until oldest request expires from window."""
+        if not self.requests[client_id]:
+            return 0
+        oldest = min(self.requests[client_id])
+        return max(0, int(window_seconds - (time.time() - oldest)))
+
+rate_limiter = RateLimiter()
+
+# Rate limit configurations
+RATE_LIMITS = {
+    "benchmarks": {"limit": 5, "window": 60},      # 5 requests per minute
+    "favorites": {"limit": 30, "window": 60},      # 30 requests per minute
+    "websocket": {"limit": 10, "window": 60},      # 10 connections per minute
+}
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request (supports proxies)."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+async def check_rate_limit(request: Request, limit_type: str):
+    """Check rate limit and raise 429 if exceeded."""
+    client_ip = get_client_ip(request)
+    config = RATE_LIMITS.get(limit_type, {"limit": 60, "window": 60})
+    
+    if not rate_limiter.is_allowed(f"{limit_type}:{client_ip}", config["limit"], config["window"]):
+        retry_after = rate_limiter.get_retry_after(f"{limit_type}:{client_ip}", config["window"])
+        raise HTTPException(
+            status_code=HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)}
+        )
+
+# ============================================================================
+# CORS Configuration
+# ============================================================================
+
 # Allowed origins - configure via environment variable for production
-# Format: comma-separated list of origins
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:5173,http://localhost:8080,http://localhost:3000,http://127.0.0.1:5173"
@@ -45,7 +134,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", API_KEY_NAME],
 )
 
 # Use system Python interpreter instead of hardcoded path
@@ -298,11 +387,11 @@ async def root():
     return {"status": "online", "version": "4.0", "websocket": "/ws/benchmarks/{client_id}"}
 
 @app.websocket("/ws/benchmarks/{client_id}")
-async def websocket_benchmark(websocket: WebSocket, client_id: str):
+async def websocket_benchmark(websocket: WebSocket, client_id: str, token: Optional[str] = Query(None)):
     """
     WebSocket endpoint for real-time benchmark telemetry.
     
-    Connect with: ws://localhost:8000/ws/benchmarks/<unique_client_id>
+    Connect with: ws://localhost:8000/ws/benchmarks/<unique_client_id>?token=<API_KEY>
     
     The server will stream JSON telemetry payloads with:
     - status: CONNECTING, RUNNING, COMPLETED, STOPPED, ERROR
@@ -314,9 +403,23 @@ async def websocket_benchmark(websocket: WebSocket, client_id: str):
     - decoder_backlog_ms: Decoder latency
     - timestamp: ISO timestamp
     """
+    # Validate token for WebSocket authentication
+    if not token or not secrets.compare_digest(token, API_KEY):
+        await websocket.close(code=4001, reason="Invalid or missing API token")
+        logger.warning(f"WebSocket auth failed for client: {client_id}")
+        return
+    
     # Validate client_id format to prevent injection
     if not re.match(r'^[a-zA-Z0-9_\-]{1,64}$', client_id):
         await websocket.close(code=4000, reason="Invalid client ID format")
+        return
+    
+    # Rate limit WebSocket connections
+    client_key = f"websocket:{websocket.client.host if websocket.client else 'unknown'}"
+    config = RATE_LIMITS["websocket"]
+    if not rate_limiter.is_allowed(client_key, config["limit"], config["window"]):
+        await websocket.close(code=4029, reason="Rate limit exceeded")
+        logger.warning(f"WebSocket rate limit exceeded for: {client_key}")
         return
     
     await manager.connect(client_id, websocket)
@@ -381,7 +484,11 @@ async def stop_benchmark(client_id: str):
     return {"status": "stop_requested", "client_id": client_id}
 
 @app.post("/api/benchmarks/run")
-async def run_benchmark(request: RunBenchmarkRequest):
+async def run_benchmark(
+    request: RunBenchmarkRequest,
+    http_request: Request,
+    api_key: str = Depends(verify_api_key)
+):
     """
     Executes a benchmark script and returns the result.
     For real-time updates, use the WebSocket endpoint instead.
@@ -439,7 +546,10 @@ async def run_benchmark(request: RunBenchmarkRequest):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/favorites/load")
-async def load_favorites():
+async def load_favorites(
+    request: Request,
+    api_key: str = Depends(verify_api_key)
+):
     if not os.path.exists(FAVORITES_FILE):
         return []
     try:
@@ -450,7 +560,11 @@ async def load_favorites():
         return []
 
 @app.post("/api/favorites/save")
-async def save_favorite(config: ComparisonConfig):
+async def save_favorite(
+    config: ComparisonConfig,
+    request: Request,
+    api_key: str = Depends(verify_api_key)
+):
     """Save a comparison configuration to favorites."""
     favorites = await load_favorites()
     
