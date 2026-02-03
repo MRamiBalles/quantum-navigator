@@ -404,24 +404,92 @@ export function AtomRegisterEditor({
     });
   };
 
-  // Render atoms
+  // Render atoms with drag support
   const renderAtoms = () => {
     return config.atoms.map(atom => {
       const { cx, cy } = worldToCanvas(atom.x, atom.y);
       const roleStyle = ROLE_COLORS[atom.role];
       const isSelected = selectedAtom === atom.id;
       const hasError = errorAtomIds.has(atom.id);
+      const isBeingDragged = isDragging && selectedAtom === atom.id;
 
       return (
         <g
           key={`atom-${atom.id}`}
           transform={`translate(${cx}, ${cy})`}
           className={cn(
-            "cursor-pointer transition-transform",
-            isSelected && "scale-125"
+            "transition-transform cursor-grab active:cursor-grabbing",
+            isSelected && "scale-125",
+            isBeingDragged && "scale-110"
           )}
+          style={{ 
+            filter: isBeingDragged ? 'drop-shadow(0 0 8px hsl(var(--primary)))' : undefined,
+            transition: isBeingDragged ? 'none' : 'transform 0.15s ease-out'
+          }}
           onClick={(e) => handleAtomClick(e, atom.id)}
+          onMouseDown={(e) => {
+            if (readOnly || currentTool !== "select") return;
+            e.stopPropagation();
+            setSelectedAtom(atom.id);
+            setIsDragging(true);
+            
+            const startX = e.clientX;
+            const startY = e.clientY;
+            
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+              const dx = moveEvent.clientX - startX;
+              const dy = moveEvent.clientY - startY;
+              
+              // Update atom position in real-time
+              setConfig(prev => ({
+                ...prev,
+                atoms: prev.atoms.map(a =>
+                  a.id === atom.id
+                    ? { 
+                        ...a, 
+                        x: atom.x + dx / SCALE, 
+                        y: atom.y - dy / SCALE // Flip Y for canvas coords
+                      }
+                    : a
+                ),
+              }));
+            };
+            
+            const handleMouseUp = () => {
+              setIsDragging(false);
+              
+              // Snap to grid on release
+              setConfig(prev => ({
+                ...prev,
+                atoms: prev.atoms.map(a => {
+                  if (a.id !== atom.id) return a;
+                  return {
+                    ...a,
+                    x: Math.round(a.x / GRID_STEP) * GRID_STEP,
+                    y: Math.round(a.y / GRID_STEP) * GRID_STEP,
+                  };
+                }),
+              }));
+              
+              document.removeEventListener('mousemove', handleMouseMove);
+              document.removeEventListener('mouseup', handleMouseUp);
+            };
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+          }}
         >
+          {/* Drag indicator ring */}
+          {isBeingDragged && (
+            <circle
+              r={20}
+              fill="none"
+              className="stroke-primary animate-pulse"
+              strokeWidth={2}
+              strokeDasharray="4 4"
+            />
+          )}
+
           {/* Error indicator */}
           {hasError && (
             <circle
@@ -432,7 +500,7 @@ export function AtomRegisterEditor({
           )}
 
           {/* Selection ring */}
-          {isSelected && (
+          {isSelected && !isBeingDragged && (
             <circle
               r={14}
               fill="none"
@@ -448,6 +516,7 @@ export function AtomRegisterEditor({
             fill={roleStyle.fill}
             stroke={isSelected ? "#fff" : roleStyle.stroke}
             strokeWidth={2}
+            className="transition-colors"
           />
 
           {/* AOD indicator */}
@@ -459,7 +528,7 @@ export function AtomRegisterEditor({
           <text
             y={4}
             textAnchor="middle"
-            className="fill-white text-xs font-bold pointer-events-none"
+            className="fill-white text-xs font-bold pointer-events-none select-none"
           >
             {atom.id}
           </text>
