@@ -6,10 +6,10 @@ import { QuantumBackground } from "@/components/background/QuantumBackground";
 
 const moduleTitles: Record<string, string> = {
   dashboard: "Dashboard Principal",
-  routing: "Compilación & Routing Inteligente",
-  qml: "Carga de Datos (QML)",
-  qec: "Corrección de Errores (QEC)",
-  pqc: "Criptografía Post-Cuántica",
+  routing: "Orquestación de Routing (SWAP + AOD)",
+  qml: "Carga de Datos ATP (L-BFGS-B)",
+  qec: "Simulación QEC (Stim + PyMatching)",
+  pqc: "Sandbox PQC (Kyber + liboqs)",
 };
 
 const Index = () => {
