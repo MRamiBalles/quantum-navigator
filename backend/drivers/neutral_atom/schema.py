@@ -351,7 +351,27 @@ class Measurement(BaseModel):
     
     # Measurement configuration
     basis: Literal["computational", "x", "y"] = Field(default="computational")
+
+
+class ShieldingEvent(BaseModel):
+    """
+    Dynamic spectral shielding control (Harvard/MIT 2025).
     
+    Activates/deactivates the auxiliary laser (5P₃/₂ → 4D₅/₂ transition)
+    that shifts Rydberg levels via Autler-Townes effect, protecting
+    atoms from scattered Rydberg light during loading/readout phases.
+    """
+    op_type: Literal["shielding"] = "shielding"
+    start_time: float = Field(..., ge=0, description="Start time in ns")
+    duration: float = Field(..., gt=0, description="Shielding duration in ns")
+    
+    # Target zones or atoms
+    zone_ids: Optional[list[str]] = Field(default=None, description="Zones to shield")
+    atom_ids: Optional[list[int]] = Field(default=None, description="Specific atoms to shield")
+    
+    # Shielding mode
+    mode: Literal["activate", "deactivate"] = Field(default="activate")
+
 
 # Union type for all operations
 NeutralAtomOperation = Union[
@@ -359,7 +379,8 @@ NeutralAtomOperation = Union[
     LocalDetuning, 
     ShuttleMove,
     RydbergGate,
-    Measurement
+    Measurement,
+    ShieldingEvent
 ]
 
 
