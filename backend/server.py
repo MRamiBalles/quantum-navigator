@@ -348,10 +348,25 @@ async def simulate_benchmark_execution(
         # Physics: Fidelity decay
         fidelity *= (1 - 0.0001 * n_vib)
         
-        # Simulate decoder backlog (random spikes)
-        decoder_backlog = random.uniform(0.5, 2.0)
-        if cycle % 15 == 0:  # Occasional spike
-            decoder_backlog = random.uniform(5.0, 15.0)
+        # Physics: Decoder Backlog (Riverlane LCD / Google Willow model)
+        # Latency T_dec = k * exp(alpha * d)
+        # We vary 'd' (code distance) to simulate complexity spikes
+        
+        # Base code distance (e.g., d=3, 5, 7) dynamic simulation
+        d = 3
+        if cycle > 15: d = 5 
+        if cycle > 30: d = 7
+        
+        # Constants from Ziad 2025 (scaled for simulation)
+        k = 0.05  # Base processing time in ms
+        alpha = 0.8 # Exponential scaling factor
+        
+        # Add stochastic noise + exponential term
+        decoding_latency = k * math.exp(alpha * d) * random.uniform(0.9, 1.1)
+        
+        # In this simulation, we report the instantaneous latency to see the "Death Point"
+        # The frontend will flag if decoding_latency > ZONE_REORDER_TIME_MS (20ms)
+        decoder_backlog_ms = round(decoding_latency, 2)
         
         # Send telemetry
         telemetry = TelemetryPayload(
@@ -361,7 +376,7 @@ async def simulate_benchmark_execution(
             atoms_lost=total_atoms_lost,
             n_vib=round(n_vib, 3),
             fidelity=round(fidelity, 6),
-            decoder_backlog_ms=round(decoder_backlog, 2),
+            decoder_backlog_ms=decoder_backlog_ms,
             timestamp=datetime.now().isoformat()
         )
         
@@ -592,6 +607,63 @@ async def save_favorite(
     except Exception as e:
         logger.error(f"Error saving favorite: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to save favorite")
+
+# ============================================================================
+# TILT-lite Topological Optimizer Endpoint
+# ============================================================================
+
+from optimizer import TILTOptimizer
+
+class OptimizationRequest(BaseModel):
+    num_qubits: int = 50
+    num_gates: int = 200
+    width: int = 20
+    height: int = 20
+
+@app.post("/api/topology/optimize")
+async def optimize_topology(
+    request: OptimizationRequest,
+    req: Request,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Runs the TILT-lite topological optimizer to reduce heating.
+    Returns comparison of random vs. spectral mapping costs.
+    """
+    # Check rate limit (10 req/min for compute-heavy optimization)
+    # Using 'benchmarks' bucket as it's compute intensive
+    await check_rate_limit(req, "benchmarks")
+    
+    try:
+        opt = TILTOptimizer(request.width, request.height)
+        graph = opt.generate_random_circuit_graph(request.num_qubits, request.num_gates)
+        result = opt.optimize_mapping(graph)
+        return result
+    except Exception as e:
+        logger.error(f"Optimization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# QRAM & Data Loading Endpoint
+# ============================================================================
+
+from benchmarks.benchmark_qram import run_benchmark as run_qram_benchmark
+
+@app.get("/api/benchmarks/qram")
+async def get_qram_analysis(
+    req: Request,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Returns QRAM cost analysis vs Angle Encoding.
+    """
+    await check_rate_limit(req, "benchmarks")
+    try:
+        data = run_qram_benchmark()
+        return data
+    except Exception as e:
+        logger.error(f"QRAM benchmark failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

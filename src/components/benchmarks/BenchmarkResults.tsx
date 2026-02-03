@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Activity,
   Atom,
-  StopCircle
+  StopCircle,
+  LayoutGrid
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +35,8 @@ import { CoolingStrategiesChart } from "./charts/CoolingStrategiesChart";
 import { ZonedCyclesChart } from "./charts/ZonedCyclesChart";
 import { SustainableDepthChart } from "./charts/SustainableDepthChart";
 import { BenchmarkComparison } from "./BenchmarkComparison";
+import { TopologyOptimizer } from "./TopologyOptimizer";
+import { QMLResourceAnalysis } from "./QMLResourceAnalysis";
 import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
 
 const BENCHMARK_MAP: Record<string, string> = {
@@ -85,11 +88,18 @@ export function BenchmarkResults() {
       const data: TelemetryPayload = JSON.parse(event.data);
       setTelemetry(data);
 
-      // Check for decoder backlog warning (>10ms = critical)
-      if (data.decoder_backlog_ms > 10) {
+      // Check for decoder backlog "Death Point" (>20ms cycle time)
+      if (data.decoder_backlog_ms > 20.0) {
         toast({
-          title: "⚠️ Decoder Backlog Detectado",
-          description: `Latencia: ${data.decoder_backlog_ms.toFixed(1)}ms`,
+          title: "🚨 QEC FAILURE: Death Point Reached",
+          description: `Backlog (${data.decoder_backlog_ms.toFixed(1)}ms) > Tiempo Ciclo (20ms)`,
+          variant: "destructive",
+        });
+      } else if (data.decoder_backlog_ms > 10.0) {
+        // Warning zone
+        toast({
+          title: "⚠️ Decoder Stress",
+          description: `Latencia alta: ${data.decoder_backlog_ms.toFixed(1)}ms`,
           variant: "destructive",
         });
       }
@@ -315,13 +325,13 @@ export function BenchmarkResults() {
             </div>
 
             {/* Decoder Backlog */}
-            <div className={`p-3 rounded-lg border ${(telemetry?.decoder_backlog_ms || 0) > 10 ? 'border-destructive bg-destructive/10 animate-pulse' : 'border-border bg-muted/30'}`}>
+            <div className={`p-3 rounded-lg border ${(telemetry?.decoder_backlog_ms || 0) > 20 ? 'border-destructive bg-destructive/20 animate-pulse' : (telemetry?.decoder_backlog_ms || 0) > 10 ? 'border-warning bg-warning/10' : 'border-border bg-muted/30'}`}>
               <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="w-4 h-4 text-destructive" />
+                <AlertTriangle className={`w-4 h-4 ${(telemetry?.decoder_backlog_ms || 0) > 20 ? 'text-destructive' : 'text-warning'}`} />
                 <span className="text-xs font-medium">Backlog</span>
               </div>
-              <p className="text-lg font-mono font-bold">{telemetry?.decoder_backlog_ms?.toFixed(1) || "0.0"}ms</p>
-              <p className="text-[10px] text-muted-foreground">Decoder latency</p>
+              <p className="text-lg font-mono font-bold">{(telemetry?.decoder_backlog_ms || 0).toFixed(1)}ms</p>
+              <p className="text-[10px] text-muted-foreground">Limit: 20ms (Death Point)</p>
             </div>
           </div>
         </div>
@@ -387,8 +397,15 @@ export function BenchmarkResults() {
             <span className="hidden sm:inline">Zoned</span>
           </TabsTrigger>
           <TabsTrigger value="sustainable" className="gap-2">
-            <Infinity className="w-4 h-4" />
             <span className="hidden sm:inline">Depth</span>
+          </TabsTrigger>
+          <TabsTrigger value="optimization" className="gap-2">
+            <LayoutGrid className="w-4 h-4" />
+            <span className="hidden sm:inline">Optimizar</span>
+          </TabsTrigger>
+          <TabsTrigger value="qml" className="gap-2">
+            <Activity className="w-4 h-4" />
+            <span className="hidden sm:inline">QML/QRAM</span>
           </TabsTrigger>
           <TabsTrigger value="compare" className="gap-2">
             <GitCompare className="w-4 h-4" />
@@ -414,6 +431,14 @@ export function BenchmarkResults() {
 
         <TabsContent value="sustainable" className="mt-6">
           <SustainableDepthChart />
+        </TabsContent>
+
+        <TabsContent value="optimization" className="mt-6">
+          <TopologyOptimizer />
+        </TabsContent>
+
+        <TabsContent value="qml" className="mt-6">
+          <QMLResourceAnalysis />
         </TabsContent>
 
         <TabsContent value="compare" className="mt-6">
