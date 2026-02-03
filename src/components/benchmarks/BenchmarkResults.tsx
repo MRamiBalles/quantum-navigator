@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -10,7 +10,11 @@ import {
   RefreshCw,
   Infinity,
   FileSpreadsheet,
-  GitCompare
+  GitCompare,
+  AlertTriangle,
+  Activity,
+  Atom,
+  StopCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,43 +44,111 @@ const BENCHMARK_MAP: Record<string, string> = {
   sustainable: "sustainable_depth"
 };
 
+// WebSocket Telemetry Interface (Harvard/QuEra 2025)
+interface TelemetryPayload {
+  status: "CONNECTING" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR";
+  percentage: number;
+  cycle: number;
+  atoms_lost: number;
+  n_vib: number;
+  fidelity: number;
+  decoder_backlog_ms: number;
+  timestamp: string;
+}
+
 export function BenchmarkResults() {
   const [activeTab, setActiveTab] = useState("velocity");
   const [isRunning, setIsRunning] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleRunBenchmarks = async () => {
-    setIsRunning(true);
-    try {
-      const benchmarkType = BENCHMARK_MAP[activeTab] || "full";
-      const response = await fetch("http://localhost:8000/api/benchmarks/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ benchmark_type: benchmarkType })
-      });
+  // WebSocket Telemetry State
+  const [telemetry, setTelemetry] = useState<TelemetryPayload | null>(null);
+  const [wsStatus, setWsStatus] = useState<"disconnected" | "connected" | "error">("disconnected");
+  const wsRef = useRef<WebSocket | null>(null);
+  const clientIdRef = useRef<string>(`gui_${Date.now()}`);
 
-      if (!response.ok) throw new Error("Backend benchmark execution failed");
+  // WebSocket Connection Handler
+  const connectWebSocket = useCallback(() => {
+    const clientId = clientIdRef.current;
+    const ws = new WebSocket(`ws://localhost:8000/ws/benchmarks/${clientId}`);
 
-      const result = await response.json();
+    ws.onopen = () => {
+      setWsStatus("connected");
+      // Send start command
+      const benchmarkType = BENCHMARK_MAP[activeTab] || "velocity_fidelity";
+      ws.send(JSON.stringify({ benchmark_type: benchmarkType, cycles: 50 }));
+    };
 
+    ws.onmessage = (event) => {
+      const data: TelemetryPayload = JSON.parse(event.data);
+      setTelemetry(data);
+
+      // Check for decoder backlog warning (>10ms = critical)
+      if (data.decoder_backlog_ms > 10) {
+        toast({
+          title: "⚠️ Decoder Backlog Detectado",
+          description: `Latencia: ${data.decoder_backlog_ms.toFixed(1)}ms`,
+          variant: "destructive",
+        });
+      }
+
+      // Check for completion
+      if (data.status === "COMPLETED" || data.status === "STOPPED") {
+        setIsRunning(false);
+        setWsStatus("disconnected");
+        toast({
+          title: data.status === "COMPLETED" ? "✓ Benchmark Completado" : "Benchmark Detenido",
+          description: `Ciclos: ${data.cycle} | Fidelidad: ${(data.fidelity * 100).toFixed(2)}%`,
+        });
+      }
+    };
+
+    ws.onerror = () => {
+      setWsStatus("error");
+      setIsRunning(false);
       toast({
-        title: "Benchmark Completado",
-        description: `Se han actualizado los resultados para: ${benchmarkType}`,
-      });
-
-      // In a real app, we would trigger a data refresh in the charts here
-      // For now, the charts fetch the latest JSON when they remount
-    } catch (error) {
-      console.error("Benchmark error:", error);
-      toast({
-        title: "Error de Ejecución",
-        description: "No se pudo conectar con el backend Python",
+        title: "Error de Conexión",
+        description: "No se pudo conectar al servidor WebSocket",
         variant: "destructive",
       });
-    } finally {
-      setIsRunning(false);
+    };
+
+    ws.onclose = () => {
+      setWsStatus("disconnected");
+    };
+
+    wsRef.current = ws;
+  }, [activeTab]);
+
+  // Handle Run Benchmarks (WebSocket mode)
+  const handleRunBenchmarks = () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    setTelemetry(null);
+    clientIdRef.current = `gui_${Date.now()}`;
+    connectWebSocket();
+  };
+
+  // Handle Stop Benchmarks
+  const handleStopBenchmarks = async () => {
+    try {
+      await fetch(`http://localhost:8000/ws/benchmarks/${clientIdRef.current}/stop`, {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error("Stop error:", e);
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
 
   const handleExportCurrent = async () => {
     setIsExporting(true);
@@ -134,15 +206,25 @@ export function BenchmarkResults() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRunBenchmarks}
-            disabled={isRunning}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRunning ? 'animate-spin' : ''}`} />
-            {isRunning ? "Ejecutando..." : "Ejecutar Benchmarks"}
-          </Button>
+          {isRunning ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleStopBenchmarks}
+            >
+              <StopCircle className="w-4 h-4 mr-2" />
+              Detener
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunBenchmarks}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Ejecutar Benchmarks
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" disabled={isExporting}>
@@ -169,6 +251,76 @@ export function BenchmarkResults() {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Real-time Telemetry Panel (Harvard/QuEra 2025) */}
+      {(isRunning || telemetry) && (
+        <div className="p-4 rounded-xl border border-quantum-glow/30 bg-gradient-to-r from-quantum-glow/5 to-transparent">
+          <div className="flex items-center gap-4 mb-3">
+            <Activity className="w-5 h-5 text-quantum-glow animate-pulse" />
+            <span className="font-semibold text-sm">Telemetría en Tiempo Real</span>
+            <Badge variant="outline" className="ml-auto">
+              {telemetry?.status || "CONNECTING"}
+            </Badge>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Ciclo {telemetry?.cycle || 0} / 50</span>
+              <span>{(telemetry?.percentage || 0).toFixed(0)}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-quantum-glow transition-all duration-300"
+                style={{ width: `${telemetry?.percentage || 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Physics Gauges */}
+          <div className="grid grid-cols-4 gap-3">
+            {/* n_vib (Heating) */}
+            <div className={`p-3 rounded-lg border ${(telemetry?.n_vib || 0) > 1.2 ? 'border-destructive bg-destructive/5 animate-pulse' : 'border-border bg-muted/30'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Thermometer className="w-4 h-4 text-warning" />
+                <span className="text-xs font-medium">n_vib</span>
+              </div>
+              <p className="text-lg font-mono font-bold">{telemetry?.n_vib?.toFixed(2) || "0.00"}</p>
+              <p className="text-[10px] text-muted-foreground">Heating (umbral: 1.5)</p>
+            </div>
+
+            {/* Atoms Lost */}
+            <div className={`p-3 rounded-lg border ${(telemetry?.atoms_lost || 0) > 0 ? 'border-warning bg-warning/5' : 'border-border bg-muted/30'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Atom className="w-4 h-4 text-primary" />
+                <span className="text-xs font-medium">Átomos</span>
+              </div>
+              <p className="text-lg font-mono font-bold">{telemetry?.atoms_lost || 0}</p>
+              <p className="text-[10px] text-muted-foreground">Perdidos (acumulado)</p>
+            </div>
+
+            {/* Fidelity */}
+            <div className="p-3 rounded-lg border border-border bg-muted/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-4 h-4 text-success" />
+                <span className="text-xs font-medium">Fidelidad</span>
+              </div>
+              <p className="text-lg font-mono font-bold">{((telemetry?.fidelity || 1) * 100).toFixed(3)}%</p>
+              <p className="text-[10px] text-muted-foreground">Lógica actual</p>
+            </div>
+
+            {/* Decoder Backlog */}
+            <div className={`p-3 rounded-lg border ${(telemetry?.decoder_backlog_ms || 0) > 10 ? 'border-destructive bg-destructive/10 animate-pulse' : 'border-border bg-muted/30'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
+                <span className="text-xs font-medium">Backlog</span>
+              </div>
+              <p className="text-lg font-mono font-bold">{telemetry?.decoder_backlog_ms?.toFixed(1) || "0.0"}ms</p>
+              <p className="text-[10px] text-muted-foreground">Decoder latency</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
