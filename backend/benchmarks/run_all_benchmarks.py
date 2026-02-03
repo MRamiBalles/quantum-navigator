@@ -3,7 +3,7 @@
 Benchmark Suite Runner
 ======================
 
-Orchestrates all four experiments and generates publication-ready outputs.
+Orchestrates all five experiments and generates publication-ready outputs.
 
 Usage:
     python run_all_benchmarks.py
@@ -11,13 +11,10 @@ Usage:
 Output:
     ./benchmark_results/
         experiment_a_velocity_fidelity.csv
-        experiment_a_velocity_fidelity.json
         experiment_b_ancilla_vs_swap.csv
-        experiment_b_ancilla_vs_swap.json
         experiment_c_cooling_strategies.csv
-        experiment_c_cooling_strategies.json
         experiment_d_zoned_cycles.csv
-        experiment_d_zoned_cycles.json
+        experiment_e_sustainable_depth.csv  (v4.0)
         summary_report.md
 
 Author: Quantum Navigator Research Team
@@ -34,6 +31,7 @@ from benchmark_velocity_fidelity import main as run_exp_a
 from benchmark_ancilla_vs_swap import main as run_exp_b
 from benchmark_cooling_strategies import main as run_exp_c
 from benchmark_zoned_cycles import main as run_exp_d
+from benchmark_sustainable_depth import main as run_exp_e  # v4.0
 
 
 def generate_summary_report(output_dir: Path):
@@ -42,7 +40,7 @@ def generate_summary_report(output_dir: Path):
     report = f"""# Quantum Navigator Benchmark Results
 
 **Generated**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-**Version**: 3.0 (HeatingModel + Flying Ancillas)
+**Version**: 4.0 (Continuous Operation + Sustainable Depth)
 
 ---
 
@@ -54,6 +52,7 @@ def generate_summary_report(output_dir: Path):
 | B | Flying Ancillas vs SWAP Chains | ✅ Complete |
 | C | Cooling Strategies Comparison | ✅ Complete |
 | D | Zoned Architecture Cycles | ✅ Complete |
+| E | Sustainable Circuit Depth (v4.0) | ✅ Complete |
 
 ---
 
@@ -140,6 +139,7 @@ def main():
         ("B", "Flying Ancillas vs SWAP", run_exp_b),
         ("C", "Cooling Strategies", run_exp_c),
         ("D", "Zoned Architecture Cycles", run_exp_d),
+        ("E", "Sustainable Circuit Depth", run_exp_e),  # v4.0
     ]
     
     results = {}
