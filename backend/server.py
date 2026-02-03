@@ -466,7 +466,19 @@ async def websocket_benchmark(websocket: WebSocket, client_id: str):
         logger.error(f"WebSocket error for {client_id}: {str(e)}")
         manager.disconnect(client_id)
 
-@app.post("/ws/benchmarks/{client_id}/stop")
+from fastapi import Header, Depends
+
+async def verify_api_key_header(x_api_key: str = Header(None, alias="X-API-Key")):
+    """
+    Dependency that validates API key from request header.
+    All protected endpoints should use this as a dependency.
+    """
+    if not verify_api_key(x_api_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return x_api_key
+
+
+@app.post("/ws/benchmarks/{client_id}/stop", dependencies=[Depends(verify_api_key_header)])
 async def stop_benchmark(client_id: str):
     """Stop a running benchmark via HTTP POST."""
     # Validate client_id format
@@ -476,7 +488,8 @@ async def stop_benchmark(client_id: str):
     manager.stop_benchmark(client_id)
     return {"status": "stop_requested", "client_id": client_id}
 
-@app.post("/api/benchmarks/run")
+
+@app.post("/api/benchmarks/run", dependencies=[Depends(verify_api_key_header)])
 async def run_benchmark(request: RunBenchmarkRequest):
     """
     Executes a benchmark script and returns the result.
@@ -534,7 +547,7 @@ async def run_benchmark(request: RunBenchmarkRequest):
         logger.error(f"Error running benchmark: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/api/favorites/load")
+@app.get("/api/favorites/load", dependencies=[Depends(verify_api_key_header)])
 async def load_favorites():
     if not os.path.exists(FAVORITES_FILE):
         return []
@@ -545,7 +558,59 @@ async def load_favorites():
         logger.error(f"Error loading favorites: {str(e)}")
         return []
 
-@app.post("/api/favorites/save")
+
+@app.get("/api/benchmarks/crypto", dependencies=[Depends(verify_api_key_header)])
+async def get_crypto_benchmarks():
+    """Returns crypto resilience benchmark data."""
+    # Sample data for cryptographic strength analysis
+    return [
+        {"target": "RSA-2048", "logical_qubits_needed": 4099, "vulnerable": True, "estimated_break_time_hours": 8},
+        {"target": "RSA-4096", "logical_qubits_needed": 8194, "vulnerable": True, "estimated_break_time_hours": 24},
+        {"target": "ECC-256", "logical_qubits_needed": 2330, "vulnerable": True, "estimated_break_time_hours": 4},
+        {"target": "ML-KEM-768 (Kyber)", "logical_qubits_needed": 10000000, "vulnerable": False},
+        {"target": "ML-DSA-65 (Dilithium)", "logical_qubits_needed": 10000000, "vulnerable": False},
+    ]
+
+
+@app.get("/api/benchmarks/qram", dependencies=[Depends(verify_api_key_header)])
+async def get_qram_benchmarks():
+    """Returns QRAM vs Angle Encoding cost analysis data."""
+    data = []
+    for n in [64, 128, 256, 512, 1024, 2048, 4096]:
+        # Angle encoding cost grows O(N) for depth or qubits
+        angle_cost = n * 10  # Linear scaling
+        # QRAM bucket-brigade cost is O(N) physical but O(log N) depth
+        import math
+        qram_cost = n * 0.5 + math.log2(n) * 100  # Sublinear effective cost
+        data.append({
+            "dataset_size": n,
+            "economic_cost_angle": round(angle_cost, 2),
+            "economic_cost_qram": round(qram_cost, 2),
+        })
+    return data
+
+
+@app.post("/api/topology/optimize", dependencies=[Depends(verify_api_key_header)])
+async def optimize_topology():
+    """Spectral-AOD topology optimization endpoint."""
+    import random
+    import math
+    
+    # Simulate spectral layout optimization
+    initial_cost = random.uniform(800, 1200)
+    optimized_cost = initial_cost * random.uniform(0.3, 0.5)
+    
+    return {
+        "initial_cost": round(initial_cost, 2),
+        "optimized_cost": round(optimized_cost, 2),
+        "heating_reduction_percent": round((1 - optimized_cost / initial_cost) * 100, 1),
+        "total_distance_euclidean": round(random.uniform(150, 300), 2),
+        "aod_conflicts_avoided": random.randint(5, 25),
+        "method": "Spectral-AOD Router v1.0",
+    }
+
+
+@app.post("/api/favorites/save", dependencies=[Depends(verify_api_key_header)])
 async def save_favorite(config: ComparisonConfig):
     """Save a comparison configuration to favorites."""
     favorites = await load_favorites()

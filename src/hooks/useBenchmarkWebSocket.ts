@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { WS_BASE_URL, API_BASE_URL, getApiKey } from "@/lib/api-config";
 
 export interface PhysicsTelemetry {
   n_vib: number;
@@ -43,7 +44,7 @@ interface UseBenchmarkWebSocketOptions {
 
 export function useBenchmarkWebSocket(options: UseBenchmarkWebSocketOptions = {}) {
   const {
-    serverUrl = "ws://localhost:8000",
+    serverUrl = WS_BASE_URL,
     onTelemetry,
     onComplete,
     onError,
@@ -120,8 +121,11 @@ export function useBenchmarkWebSocket(options: UseBenchmarkWebSocketOptions = {}
   const stop = useCallback(async () => {
     if (runId) {
       try {
-        await fetch(`http://localhost:8000/api/benchmarks/stop/${runId}`, {
+        await fetch(`${API_BASE_URL}/api/benchmarks/stop/${runId}`, {
           method: "POST",
+          headers: {
+            "X-API-Key": getApiKey(),
+          },
         });
       } catch (e) {
         console.error("Failed to stop benchmark:", e);
