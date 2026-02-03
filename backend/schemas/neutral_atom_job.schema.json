@@ -1,0 +1,464 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://quantum-navigator.io/schemas/neutral-atom-job-v2.0.json",
+    "title": "Neutral Atom Quantum Job",
+    "description": "Technology-agnostic JSON IR for neutral atom quantum processors (Pasqal, QuEra)",
+    "type": "object",
+    "required": [
+        "device",
+        "register",
+        "operations"
+    ],
+    "properties": {
+        "job_id": {
+            "type": "string",
+            "description": "Unique job identifier"
+        },
+        "name": {
+            "type": "string",
+            "description": "Human-readable job name"
+        },
+        "version": {
+            "type": "string",
+            "default": "2.0",
+            "description": "Schema version"
+        },
+        "device": {
+            "$ref": "#/definitions/DeviceConfig"
+        },
+        "register": {
+            "$ref": "#/definitions/NeutralAtomRegister"
+        },
+        "operations": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Operation"
+            },
+            "minItems": 1,
+            "description": "Sequence of quantum operations"
+        },
+        "simulation": {
+            "$ref": "#/definitions/SimulationConfig"
+        }
+    },
+    "definitions": {
+        "DeviceConfig": {
+            "type": "object",
+            "required": [
+                "backend_id"
+            ],
+            "properties": {
+                "backend_id": {
+                    "type": "string",
+                    "enum": [
+                        "pasqal_fresnel",
+                        "quera_aquila",
+                        "simulator"
+                    ],
+                    "description": "Target device identifier"
+                },
+                "max_omega": {
+                    "type": "number",
+                    "description": "Max Rabi frequency (rad/µs)"
+                },
+                "max_detuning": {
+                    "type": "number",
+                    "description": "Max detuning (rad/µs)"
+                },
+                "max_aod_velocity": {
+                    "type": "number",
+                    "default": 0.55,
+                    "description": "Max AOD velocity (µm/µs)"
+                }
+            }
+        },
+        "NeutralAtomRegister": {
+            "type": "object",
+            "required": [
+                "atoms"
+            ],
+            "properties": {
+                "layout_type": {
+                    "type": "string",
+                    "enum": [
+                        "triangular",
+                        "rectangular",
+                        "honeycomb",
+                        "arbitrary"
+                    ],
+                    "default": "arbitrary"
+                },
+                "min_atom_distance": {
+                    "type": "number",
+                    "default": 4.0,
+                    "minimum": 1.0,
+                    "maximum": 20.0,
+                    "description": "Minimum inter-atom distance in µm"
+                },
+                "blockade_radius": {
+                    "type": "number",
+                    "default": 8.0,
+                    "minimum": 4.0,
+                    "maximum": 15.0,
+                    "description": "Rydberg blockade radius in µm"
+                },
+                "atoms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/AtomPosition"
+                    },
+                    "minItems": 1,
+                    "maxItems": 256
+                }
+            }
+        },
+        "AtomPosition": {
+            "type": "object",
+            "required": [
+                "id",
+                "x",
+                "y"
+            ],
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Unique atom identifier"
+                },
+                "x": {
+                    "type": "number",
+                    "description": "X coordinate in micrometers"
+                },
+                "y": {
+                    "type": "number",
+                    "description": "Y coordinate in micrometers"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "SLM",
+                        "AOD",
+                        "STORAGE"
+                    ],
+                    "default": "SLM",
+                    "description": "Trap type: SLM (static) or AOD (mobile)"
+                },
+                "aod_row": {
+                    "type": "integer",
+                    "description": "AOD grid row for topological validation"
+                },
+                "aod_col": {
+                    "type": "integer",
+                    "description": "AOD grid column for topological validation"
+                }
+            }
+        },
+        "Operation": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/GlobalPulse"
+                },
+                {
+                    "$ref": "#/definitions/LocalDetuning"
+                },
+                {
+                    "$ref": "#/definitions/ShuttleMove"
+                },
+                {
+                    "$ref": "#/definitions/RydbergGate"
+                },
+                {
+                    "$ref": "#/definitions/Measurement"
+                }
+            ]
+        },
+        "GlobalPulse": {
+            "type": "object",
+            "required": [
+                "op_type",
+                "start_time",
+                "omega"
+            ],
+            "properties": {
+                "op_type": {
+                    "const": "global_pulse"
+                },
+                "channel": {
+                    "type": "string",
+                    "enum": [
+                        "rydberg_global",
+                        "rydberg_local",
+                        "raman_local",
+                        "digital"
+                    ],
+                    "default": "rydberg_global"
+                },
+                "start_time": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Start time in ns"
+                },
+                "omega": {
+                    "$ref": "#/definitions/WaveformSpec",
+                    "description": "Rabi frequency waveform"
+                },
+                "detuning": {
+                    "$ref": "#/definitions/WaveformSpec",
+                    "description": "Detuning waveform (optional)"
+                },
+                "phase": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 6.283185,
+                    "default": 0,
+                    "description": "Phase in radians"
+                }
+            }
+        },
+        "LocalDetuning": {
+            "type": "object",
+            "required": [
+                "op_type",
+                "start_time",
+                "target_atoms",
+                "detuning"
+            ],
+            "properties": {
+                "op_type": {
+                    "const": "local_detuning"
+                },
+                "channel": {
+                    "type": "string",
+                    "default": "raman_local"
+                },
+                "target_atoms": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "minItems": 1,
+                    "description": "Atom IDs to address"
+                },
+                "start_time": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "detuning": {
+                    "$ref": "#/definitions/WaveformSpec"
+                },
+                "weights": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    },
+                    "description": "Relative weights per atom (for DMD)"
+                }
+            }
+        },
+        "ShuttleMove": {
+            "type": "object",
+            "required": [
+                "op_type",
+                "atom_ids",
+                "start_time",
+                "duration",
+                "target_positions"
+            ],
+            "properties": {
+                "op_type": {
+                    "const": "shuttle"
+                },
+                "atom_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "minItems": 1,
+                    "description": "AOD atom IDs to move"
+                },
+                "start_time": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "duration": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Movement duration in ns"
+                },
+                "target_positions": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                    },
+                    "description": "Target (x, y) coordinates in µm"
+                },
+                "trajectory": {
+                    "type": "string",
+                    "enum": [
+                        "linear",
+                        "minimum_jerk",
+                        "sine"
+                    ],
+                    "default": "minimum_jerk",
+                    "description": "Motion profile"
+                }
+            }
+        },
+        "RydbergGate": {
+            "type": "object",
+            "required": [
+                "op_type",
+                "control_atom",
+                "target_atom",
+                "start_time"
+            ],
+            "properties": {
+                "op_type": {
+                    "const": "rydberg_gate"
+                },
+                "control_atom": {
+                    "type": "integer"
+                },
+                "target_atom": {
+                    "type": "integer"
+                },
+                "start_time": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "gate_type": {
+                    "type": "string",
+                    "enum": [
+                        "CZ",
+                        "CPHASE"
+                    ],
+                    "default": "CZ"
+                },
+                "phase": {
+                    "type": "number",
+                    "description": "For CPHASE, the accumulated phase"
+                },
+                "pulse": {
+                    "$ref": "#/definitions/WaveformSpec"
+                }
+            }
+        },
+        "Measurement": {
+            "type": "object",
+            "required": [
+                "op_type",
+                "atom_ids",
+                "start_time"
+            ],
+            "properties": {
+                "op_type": {
+                    "const": "measure"
+                },
+                "atom_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "minItems": 1
+                },
+                "start_time": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "basis": {
+                    "type": "string",
+                    "enum": [
+                        "computational",
+                        "x",
+                        "y"
+                    ],
+                    "default": "computational"
+                }
+            }
+        },
+        "WaveformSpec": {
+            "type": "object",
+            "required": [
+                "type",
+                "duration"
+            ],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "constant",
+                        "blackman",
+                        "gaussian",
+                        "interpolated",
+                        "composite"
+                    ]
+                },
+                "duration": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Duration in nanoseconds"
+                },
+                "amplitude": {
+                    "type": "number",
+                    "description": "For constant waveforms (rad/µs)"
+                },
+                "area": {
+                    "type": "number",
+                    "description": "For Blackman/Gaussian (rad)"
+                },
+                "times": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    },
+                    "description": "Time points for interpolated"
+                },
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    },
+                    "description": "Amplitude values for interpolated"
+                }
+            }
+        },
+        "SimulationConfig": {
+            "type": "object",
+            "properties": {
+                "backend": {
+                    "type": "string",
+                    "enum": [
+                        "qutip",
+                        "tensor_network",
+                        "braket",
+                        "hardware"
+                    ],
+                    "default": "qutip"
+                },
+                "max_bond_dimension": {
+                    "type": "integer",
+                    "default": 128
+                },
+                "shots": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000,
+                    "default": 1000
+                },
+                "compute_energy": {
+                    "type": "boolean",
+                    "default": false
+                },
+                "compute_correlations": {
+                    "type": "boolean",
+                    "default": false
+                }
+            }
+        }
+    }
+}
