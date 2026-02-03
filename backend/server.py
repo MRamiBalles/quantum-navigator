@@ -348,25 +348,52 @@ async def simulate_benchmark_execution(
         # Physics: Fidelity decay
         fidelity *= (1 - 0.0001 * n_vib)
         
-        # Physics: Decoder Backlog (Riverlane LCD / Google Willow model)
-        # Latency T_dec = k * exp(alpha * d)
-        # We vary 'd' (code distance) to simulate complexity spikes
+        # Physics: Decoder Backlog (Queue Simulation)
+        # Based on Riverlane LCD / Google Willow:
+        # If Decoding Rate < Syndrome Generation Rate, the queue explodes (Death Point).
         
-        # Base code distance (e.g., d=3, 5, 7) dynamic simulation
+        # 1. Syndrome Generation (R_syn)
+        # Assume 1 syndrome batch per cycle (e.g. 1 MHz effective generation if cycle is 1us, but here 20ms per cycle)
+        new_syndromes = 1.0 
+        
+        # 2. Decoding Capacity (R_dec)
+        # Capacity drops exponentially with code distance 'd'
+        # d=3 -> Fast, d=7 -> Slow
         d = 3
         if cycle > 15: d = 5 
         if cycle > 30: d = 7
         
-        # Constants from Ziad 2025 (scaled for simulation)
-        k = 0.05  # Base processing time in ms
-        alpha = 0.8 # Exponential scaling factor
+        # Capacity equation: C = C0 * exp(-alpha * d)
+        # Tuned so d=7 is just below 1.0 (causing backlog)
+        c0 = 10.0 # Base capacity per cycle
+        alpha = 0.4
+        decoding_capacity = c0 * math.exp(-alpha * d) * random.uniform(0.9, 1.1)
         
-        # Add stochastic noise + exponential term
-        decoding_latency = k * math.exp(alpha * d) * random.uniform(0.9, 1.1)
+        # 3. Queue Update
+        # Must persist queue state across cycles? 
+        # Actually, simulate_benchmark_execution is a single run, so we can use a local var.
+        # But we need to initialize it outside the loop.
+        # (Fixing initialization below by assuming 'syndrome_queue' exists)
         
-        # In this simulation, we report the instantaneous latency to see the "Death Point"
-        # The frontend will flag if decoding_latency > ZONE_REORDER_TIME_MS (20ms)
-        decoder_backlog_ms = round(decoding_latency, 2)
+        if 'syndrome_queue' not in locals():
+            syndrome_queue = 0.0
+            
+        syndrome_queue += new_syndromes
+        processed = min(syndrome_queue, decoding_capacity)
+        syndrome_queue -= processed
+        
+        # 4. Convert Queue Size to Time Latency
+        # Time to clear queue = Queue Size * Time_per_Syndrome
+        # Time_per_Syndrome = Cycle_Time / Capacity
+        time_to_clear = (syndrome_queue / decoding_capacity) * ZONE_REORDER_TIME_MS
+        
+        # If queue empty, latency is just processing time (1/Capacity)
+        if syndrome_queue < 0.01:
+            latency = (1.0 / decoding_capacity) * ZONE_REORDER_TIME_MS
+        else:
+            latency = time_to_clear
+            
+        decoder_backlog_ms = round(latency, 2)
         
         # Send telemetry
         telemetry = TelemetryPayload(
