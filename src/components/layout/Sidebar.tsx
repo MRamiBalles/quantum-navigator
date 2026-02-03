@@ -1,17 +1,18 @@
 import { useState } from "react";
-import { 
-  Cpu, 
-  Database, 
-  Shield, 
-  Lock, 
-  Activity, 
+import {
+  Cpu,
+  Database,
+  Shield,
+  Lock,
+  Activity,
   Settings,
   ChevronLeft,
   ChevronRight,
   Atom,
   Layers,
   BarChart3,
-  FlaskConical
+  FlaskConical,
+  BrainCircuit
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Activity, status: "active" },
   { id: "neutral-atom", label: "Neutral Atom Studio", icon: Atom, status: "active", badge: "FPQA" },
   { id: "benchmarks", label: "Benchmark Results", icon: BarChart3, status: "active", badge: "4" },
+  { id: "gnn-decoder", label: "Neural Decoder", icon: BrainCircuit, status: "active", badge: "v6.3" },
   { id: "routing", label: "Orquestación Routing", icon: Cpu, status: "active", badge: "v2" },
   { id: "qml", label: "Carga de Datos (ATP)", icon: Database, status: "idle" },
   { id: "qec", label: "QEC (Stim)", icon: Shield, status: "warning" },
@@ -42,7 +44,7 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside 
+    <aside
       className={cn(
         "relative flex flex-col h-screen border-r border-border bg-sidebar transition-all duration-300",
         collapsed ? "w-20" : "w-72"
@@ -79,7 +81,7 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeModule === item.id;
-          
+
           return (
             <button
               key={item.id}
@@ -91,14 +93,14 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
               )}
             >
               <div className="relative">
-                <Icon 
+                <Icon
                   className={cn(
                     "w-5 h-5 transition-colors",
                     isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                  )} 
+                  )}
                 />
                 {/* Status indicator */}
-                <span 
+                <span
                   className={cn(
                     "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full",
                     item.status === "active" && "bg-success",
@@ -109,7 +111,7 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
               </div>
               {!collapsed && (
                 <div className="flex items-center gap-2 flex-1">
-                  <span 
+                  <span
                     className={cn(
                       "text-sm font-medium transition-colors",
                       isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"

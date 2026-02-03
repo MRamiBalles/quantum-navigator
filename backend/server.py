@@ -31,6 +31,7 @@ from optimizer import SpectralAODRouter
 from benchmarks.benchmark_qram import run_benchmark as run_qram_benchmark
 from benchmarks.benchmark_crypto import run_crypto_benchmark
 from benchmarks.qram_phononic import run_phononic_benchmark
+from benchmarks.decoder_gnn import run_decoder_benchmark
 from exporters.bloqade import BloqadeExporter
 from exporters.openqasm3 import OpenQASM3Exporter
 
@@ -636,6 +637,15 @@ async def get_phononic_qram_benchmarks():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@app.get("/api/benchmarks/decoder", dependencies=[Depends(verify_api_key_header)])
+async def get_decoder_benchmarks():
+    """Returns Neural Decoder (GNN) vs MWPM latency comparison."""
+    try:
+        return run_decoder_benchmark()
+    except Exception as e:
+        logger.error(f"Decoder benchmark failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 class OptimizationRequest(BaseModel):
     num_qubits: int = 50
