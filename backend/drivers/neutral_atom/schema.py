@@ -66,11 +66,15 @@ class ZoneType(str, Enum):
     - STORAGE: Atoms parked between operations, shielded from laser light
     - ENTANGLEMENT: Active gate zone where Rydberg pulses are applied
     - READOUT: Fluorescence imaging zone for measurements
+    - PREPARATION: Initial loading from MOT, cooling, and rearrangement
+    - RESERVOIR: Atom reservoir for continuous replenishment (~300k atoms/s)
     - BUFFER: Transition zone between others (optional)
     """
     STORAGE = "STORAGE"
     ENTANGLEMENT = "ENTANGLEMENT"
     READOUT = "READOUT"
+    PREPARATION = "PREPARATION"
+    RESERVOIR = "RESERVOIR"
     BUFFER = "BUFFER"
 
 

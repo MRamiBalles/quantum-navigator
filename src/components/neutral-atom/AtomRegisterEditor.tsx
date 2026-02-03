@@ -36,7 +36,7 @@ export interface ValidationError {
 }
 
 // Zone types for zoned architecture (v2.1)
-export type ZoneType = "STORAGE" | "ENTANGLEMENT" | "READOUT" | "BUFFER";
+export type ZoneType = "STORAGE" | "ENTANGLEMENT" | "READOUT" | "PREPARATION" | "RESERVOIR" | "BUFFER";
 
 export interface ZoneDefinition {
   zone_id: string;
