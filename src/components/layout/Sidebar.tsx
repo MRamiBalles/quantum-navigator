@@ -50,8 +50,8 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 p-6 border-b border-border">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 quantum-glow">
-          <Atom className="w-6 h-6 text-primary" />
+        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl overflow-hidden quantum-glow">
+          <img src="/favicon.png" alt="Q-Orchestrator" className="w-full h-full object-cover" />
         </div>
         {!collapsed && (
           <div className="flex flex-col">
