@@ -30,6 +30,8 @@ from pydantic import BaseModel, field_validator
 from optimizer import SpectralAODRouter
 from benchmarks.benchmark_qram import run_benchmark as run_qram_benchmark
 from benchmarks.benchmark_crypto import run_crypto_benchmark
+from exporters.bloqade import BloqadeExporter
+from exporters.openqasm3 import OpenQASM3Exporter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -666,6 +668,40 @@ async def save_favorite(config: ComparisonConfig):
     except Exception as e:
         logger.error(f"Error saving favorite: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to save favorite")
+
+# ============================================================================
+# HPC-Bridge Export Endpoints
+# ============================================================================
+
+class ExportRequest(BaseModel):
+    num_qubits: int = 50
+    width: float = 20.0
+    height: float = 20.0
+    layout: Optional[List[Tuple[float, float]]] = None
+    gates: Optional[List[Dict[str, Any]]] = None
+
+@app.post("/api/export/bloqade", dependencies=[Depends(verify_api_key_header)])
+async def export_bloqade(request: ExportRequest):
+    """Export to QuEra Bloqade (Julia)."""
+    try:
+        exporter = BloqadeExporter()
+        script = exporter.export(request.model_dump())
+        return {"filename": "experiment.jl", "content": script}
+    except Exception as e:
+        logger.error(f"Bloqade export failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/export/qasm3", dependencies=[Depends(verify_api_key_header)])
+async def export_qasm3(request: ExportRequest):
+    """Export to OpenQASM 3.0 (Universal)."""
+    try:
+        exporter = OpenQASM3Exporter()
+        script = exporter.export(request.model_dump())
+        return {"filename": "experiment.qasm", "content": script}
+    except Exception as e:
+        logger.error(f"QASM3 export failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
