@@ -6,7 +6,8 @@ import {
   Thermometer, 
   Layers,
   Download,
-  RefreshCw
+  RefreshCw,
+  Infinity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,6 +16,7 @@ import { VelocityFidelityChart } from "./charts/VelocityFidelityChart";
 import { AncillaVsSwapChart } from "./charts/AncillaVsSwapChart";
 import { CoolingStrategiesChart } from "./charts/CoolingStrategiesChart";
 import { ZonedCyclesChart } from "./charts/ZonedCyclesChart";
+import { SustainableDepthChart } from "./charts/SustainableDepthChart";
 
 export function BenchmarkResults() {
   const [activeTab, setActiveTab] = useState("velocity");
@@ -28,11 +30,13 @@ export function BenchmarkResults() {
   const handleExportResults = () => {
     const results = {
       timestamp: new Date().toISOString(),
+      version: "4.0",
       benchmarks: {
         velocity_fidelity: { max_velocity: 0.55, fidelity_threshold: 0.99 },
         ancilla_vs_swap: { reduction_factor: "2.8x-27x" },
         cooling_strategies: ["greedy", "conservative", "adaptive"],
-        zoned_cycles: { surface_code_distance: [3, 5, 7] }
+        zoned_cycles: { surface_code_distance: [3, 5, 7] },
+        sustainable_depth: { harvard_rate: "30k atoms/s", max_depth: 100 }
       }
     };
     const blob = new Blob([JSON.stringify(results, null, 2)], { type: "application/json" });
@@ -55,7 +59,7 @@ export function BenchmarkResults() {
           <div>
             <h1 className="text-2xl font-bold quantum-text">Benchmark Results</h1>
             <p className="text-muted-foreground">
-              Análisis de rendimiento FPQA • Heating Model • Flying Ancillas
+              Análisis de rendimiento FPQA • Heating Model • Flying Ancillas • v4.0 Continuous Operation
             </p>
           </div>
         </div>
@@ -78,7 +82,7 @@ export function BenchmarkResults() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <SummaryCard
           icon={TrendingUp}
           title="Velocidad Límite"
@@ -107,26 +111,37 @@ export function BenchmarkResults() {
           description="Ciclos zonificados"
           status="success"
         />
+        <SummaryCard
+          icon={Infinity}
+          title="Operación Continua"
+          value="30k/s"
+          description="Harvard/MIT 2025"
+          status="success"
+        />
       </div>
 
       {/* Benchmark Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
           <TabsTrigger value="velocity" className="gap-2">
             <TrendingUp className="w-4 h-4" />
-            Velocidad
+            <span className="hidden sm:inline">Velocidad</span>
           </TabsTrigger>
           <TabsTrigger value="ancilla" className="gap-2">
             <Zap className="w-4 h-4" />
-            Ancilla vs SWAP
+            <span className="hidden sm:inline">Ancilla</span>
           </TabsTrigger>
           <TabsTrigger value="cooling" className="gap-2">
             <Thermometer className="w-4 h-4" />
-            Cooling
+            <span className="hidden sm:inline">Cooling</span>
           </TabsTrigger>
           <TabsTrigger value="zoned" className="gap-2">
             <Layers className="w-4 h-4" />
-            Zoned Cycles
+            <span className="hidden sm:inline">Zoned</span>
+          </TabsTrigger>
+          <TabsTrigger value="sustainable" className="gap-2">
+            <Infinity className="w-4 h-4" />
+            <span className="hidden sm:inline">Depth</span>
           </TabsTrigger>
         </TabsList>
 
@@ -144,6 +159,10 @@ export function BenchmarkResults() {
 
         <TabsContent value="zoned" className="mt-6">
           <ZonedCyclesChart />
+        </TabsContent>
+
+        <TabsContent value="sustainable" className="mt-6">
+          <SustainableDepthChart />
         </TabsContent>
       </Tabs>
     </div>
