@@ -1,110 +1,141 @@
-import * as React from "react";
 import { useState } from "react";
-import {
-  BarChart3,
-  TrendingUp,
-  Zap,
-  Thermometer,
+import { 
+  BarChart3, 
+  TrendingUp, 
+  Zap, 
+  Thermometer, 
   Layers,
   Download,
   RefreshCw,
-  Infinity
+  Infinity,
+  FileSpreadsheet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/hooks/use-toast";
 import { VelocityFidelityChart } from "./charts/VelocityFidelityChart";
 import { AncillaVsSwapChart } from "./charts/AncillaVsSwapChart";
 import { CoolingStrategiesChart } from "./charts/CoolingStrategiesChart";
 import { ZonedCyclesChart } from "./charts/ZonedCyclesChart";
 import { SustainableDepthChart } from "./charts/SustainableDepthChart";
+import { exportBenchmarkToCsv, exportAllBenchmarks } from "./utils/exportCsv";
+
+const BENCHMARK_MAP: Record<string, string> = {
+  velocity: "velocity_fidelity",
+  ancilla: "ancilla_vs_swap",
+  cooling: "cooling_strategies",
+  zoned: "zoned_cycles",
+  sustainable: "sustainable_depth"
+};
 
 export function BenchmarkResults() {
   const [activeTab, setActiveTab] = useState("velocity");
   const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleRunBenchmarks = () => {
     setIsRunning(true);
-    setProgress(0);
-
-    // Simulate real-time execution progress
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsRunning(false);
-          return 100;
-        }
-        return prev + 5;
-      });
-    }, 100);
+    setTimeout(() => setIsRunning(false), 2000);
   };
 
-  const handleExportResults = () => {
-    const results = {
-      timestamp: new Date().toISOString(),
-      version: "4.0",
-      benchmarks: {
-        velocity_fidelity: { max_velocity: 0.55, fidelity_threshold: 0.99 },
-        ancilla_vs_swap: { reduction_factor: "2.8x-27x" },
-        cooling_strategies: ["greedy", "conservative", "adaptive"],
-        zoned_cycles: { surface_code_distance: [3, 5, 7] },
-        sustainable_depth: { harvard_rate: "30k atoms/s", max_depth: 2100 }
-      }
-    };
-    const blob = new Blob([JSON.stringify(results, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `benchmark_results_v4_${new Date().getTime()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExportCurrent = async () => {
+    setIsExporting(true);
+    try {
+      const benchmarkType = BENCHMARK_MAP[activeTab];
+      await exportBenchmarkToCsv(benchmarkType);
+      toast({
+        title: "Exportación completada",
+        description: `${benchmarkType}.csv descargado correctamente`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error de exportación",
+        description: "No se pudo exportar el benchmark actual",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    setIsExporting(true);
+    try {
+      await exportAllBenchmarks();
+      toast({
+        title: "Exportación completa",
+        description: "Todos los benchmarks exportados en JSON",
+      });
+    } catch (error) {
+      toast({
+        title: "Error de exportación",
+        description: "No se pudo exportar todos los benchmarks",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
-    <div className="p-6 space-y-6 animate-in fade-in duration-700">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-quantum-glow/10 flex items-center justify-center border border-quantum-glow/20 shadow-[0_0_15px_rgba(0,194,255,0.1)]">
+          <div className="w-12 h-12 rounded-xl bg-quantum-glow/10 flex items-center justify-center">
             <BarChart3 className="w-6 h-6 text-quantum-glow" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold quantum-text tracking-tight">Benchmark Results</h1>
-            <p className="text-muted-foreground flex items-center gap-2">
-              <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/10">v4.0</Badge>
-              Análisis FPQA Hardware-Aware • Harvard/MIT 2025
+            <h1 className="text-2xl font-bold quantum-text">Benchmark Results</h1>
+            <p className="text-muted-foreground">
+              Análisis de rendimiento FPQA • Heating Model • Flying Ancillas • v4.0 Continuous Operation
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {isRunning && (
-            <div className="flex items-center gap-2 mr-4 animate-in slide-in-from-right-4">
-              <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-quantum-glow transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <span className="text-xs font-mono text-quantum-glow">{progress}%</span>
-            </div>
-          )}
-          <Button
-            variant="default"
-            size="sm"
+          <Button 
+            variant="outline" 
+            size="sm" 
             onClick={handleRunBenchmarks}
             disabled={isRunning}
-            className="bg-primary hover:bg-primary/90 shadow-[0_0_15px_rgba(var(--primary),0.3)]"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isRunning ? 'animate-spin' : ''}`} />
-            {isRunning ? "Simulando..." : "Ejecutar Full Suite"}
+            {isRunning ? "Ejecutando..." : "Ejecutar Benchmarks"}
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportResults} className="hover:bg-primary/5">
-            <Download className="w-4 h-4 mr-2" />
-            Reporte JSON
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isExporting}>
+                {isExporting ? (
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" />
+                )}
+                Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Opciones de Exportación</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportCurrent}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Exportar Tab Actual (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportAll}>
+                <Download className="w-4 h-4 mr-2" />
+                Exportar Todos (JSON)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -116,88 +147,81 @@ export function BenchmarkResults() {
           value="0.55 µm/µs"
           description="Umbral de calentamiento"
           status="success"
-          delay={100}
         />
         <SummaryCard
           icon={Zap}
           title="Reducción AOD"
-          value="24.2×"
-          description="vs SWAP (QFT-8)"
+          value="2.8×-27×"
+          description="vs cadenas SWAP"
           status="success"
-          delay={200}
         />
         <SummaryCard
           icon={Thermometer}
-          title="Optimal Cooling"
+          title="Mejor Estrategia"
           value="Adaptive"
-          description="Deep circuits crossover"
+          description="Cooling dinámico"
           status="success"
-          delay={300}
         />
         <SummaryCard
           icon={Layers}
-          title="Lifetime d=7"
-          value=">50 ciclos"
-          description="Retención de qubits"
+          title="Surface Code"
+          value="d=3,5,7"
+          description="Ciclos zonificados"
           status="success"
-          delay={400}
         />
         <SummaryCard
           icon={Infinity}
-          title="Sustainable Depth"
-          value="2100 layers"
-          description="v=0.40 µm/µs"
+          title="Operación Continua"
+          value="30k/s"
+          description="Harvard/MIT 2025"
           status="success"
-          delay={500}
         />
       </div>
 
       {/* Benchmark Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-5 w-full max-w-3xl bg-muted/30 p-1 border border-border/40">
-          <TabsTrigger value="velocity" className="gap-2 transition-all duration-300 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+          <TabsTrigger value="velocity" className="gap-2">
             <TrendingUp className="w-4 h-4" />
             <span className="hidden sm:inline">Velocidad</span>
           </TabsTrigger>
-          <TabsTrigger value="ancilla" className="gap-2 transition-all duration-300 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="ancilla" className="gap-2">
             <Zap className="w-4 h-4" />
             <span className="hidden sm:inline">Ancilla</span>
           </TabsTrigger>
-          <TabsTrigger value="cooling" className="gap-2 transition-all duration-300 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="cooling" className="gap-2">
             <Thermometer className="w-4 h-4" />
             <span className="hidden sm:inline">Cooling</span>
           </TabsTrigger>
-          <TabsTrigger value="zoned" className="gap-2 transition-all duration-300 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="zoned" className="gap-2">
             <Layers className="w-4 h-4" />
             <span className="hidden sm:inline">Zoned</span>
           </TabsTrigger>
-          <TabsTrigger value="sustainable" className="gap-2 transition-all duration-300 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="sustainable" className="gap-2">
             <Infinity className="w-4 h-4" />
             <span className="hidden sm:inline">Depth</span>
           </TabsTrigger>
         </TabsList>
 
-        <div className="relative mt-6 min-h-[500px]">
-          <TabsContent value="velocity" className="animate-in fade-in slide-in-from-bottom-4 duration-500 absolute inset-0 m-0">
-            <VelocityFidelityChart />
-          </TabsContent>
+        <TabsContent value="velocity" className="mt-6">
+          <VelocityFidelityChart />
+        </TabsContent>
 
-          <TabsContent value="ancilla" className="animate-in fade-in slide-in-from-bottom-4 duration-500 absolute inset-0 m-0">
-            <AncillaVsSwapChart />
-          </TabsContent>
+        <TabsContent value="ancilla" className="mt-6">
+          <AncillaVsSwapChart />
+        </TabsContent>
 
-          <TabsContent value="cooling" className="animate-in fade-in slide-in-from-bottom-4 duration-500 absolute inset-0 m-0">
-            <CoolingStrategiesChart />
-          </TabsContent>
+        <TabsContent value="cooling" className="mt-6">
+          <CoolingStrategiesChart />
+        </TabsContent>
 
-          <TabsContent value="zoned" className="animate-in fade-in slide-in-from-bottom-4 duration-500 absolute inset-0 m-0">
-            <ZonedCyclesChart />
-          </TabsContent>
+        <TabsContent value="zoned" className="mt-6">
+          <ZonedCyclesChart />
+        </TabsContent>
 
-          <TabsContent value="sustainable" className="animate-in fade-in slide-in-from-bottom-4 duration-500 absolute inset-0 m-0">
-            <SustainableDepthChart />
-          </TabsContent>
-        </div>
+        <TabsContent value="sustainable" className="mt-6">
+          <SustainableDepthChart />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -209,34 +233,30 @@ interface SummaryCardProps {
   value: string;
   description: string;
   status: "success" | "warning" | "error";
-  delay?: number;
 }
 
-function SummaryCard({ icon: Icon, title, value, description, status, delay = 0 }: SummaryCardProps) {
+function SummaryCard({ icon: Icon, title, value, description, status }: SummaryCardProps) {
   return (
-    <div
-      className="quantum-card p-4 group hover:border-primary/50 transition-all duration-500 hover:shadow-[0_0_20px_rgba(0,194,255,0.15)] hover:-translate-y-1 animate-in fade-in zoom-in-95 duration-700"
-      style={{ animationDelay: `${delay}ms` }}
-    >
+    <div className="quantum-card p-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/10">
       <div className="flex items-start justify-between">
-        <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-          <Icon className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
+        <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
+          <Icon className="w-5 h-5 text-primary" />
         </div>
-        <Badge
-          variant="outline"
+        <Badge 
+          variant="outline" 
           className={
-            status === "success" ? "text-success border-success/30 bg-success/5" :
-              status === "warning" ? "text-warning border-warning/30 bg-warning/5" :
-                "text-destructive border-destructive/30 bg-destructive/5"
+            status === "success" ? "text-success border-success/30" :
+            status === "warning" ? "text-warning border-warning/30" :
+            "text-destructive border-destructive/30"
           }
         >
           {status === "success" ? "✓" : status === "warning" ? "⚠" : "✗"}
         </Badge>
       </div>
       <div className="mt-3">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
-        <p className="text-2xl font-bold font-mono quantum-text mt-0.5 group-hover:text-primary transition-colors">{value}</p>
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-1 group-hover:text-muted-foreground/80">{description}</p>
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="text-2xl font-bold font-mono quantum-text">{value}</p>
+        <p className="text-xs text-muted-foreground mt-1">{description}</p>
       </div>
     </div>
   );
