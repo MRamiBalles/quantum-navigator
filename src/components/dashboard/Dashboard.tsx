@@ -4,6 +4,7 @@ import { AgentPanel } from "./AgentPanel";
 import { CircuitUploader } from "./CircuitUploader";
 import { MetricsChart } from "./MetricsChart";
 import { BackendStatus } from "./BackendStatus";
+import { ArchitectureDiagram } from "./ArchitectureDiagram";
 
 interface DashboardProps {
   onNavigate: (module: string) => void;
@@ -126,6 +127,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           <MetricsChart />
         </div>
         <div className="space-y-6">
+          <ArchitectureDiagram onNavigate={onNavigate} />
           <AgentPanel />
           <BackendStatus />
         </div>
