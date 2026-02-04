@@ -144,7 +144,7 @@ export function QMLResourceAnalysis() {
                     </CardHeader>
                     <CardContent>
                         <p className="text-sm">
-                            A pesar del acceso $O(\log N)$, la QRAM fonónica actual se ve limitada por el "Time-of-Flight" acústico ($\sim 3000 m/s$). Para datasets de $N > 10^5$, la latencia supera la barrera de los 200ns, afectando la eficiencia del algoritmo QML.
+                            A pesar del acceso O(log N), la QRAM fonónica actual se ve limitada por el "Time-of-Flight" acústico (~3000 m/s). Para datasets de N {'>'} 10⁵, la latencia supera la barrera de los 200ns, afectando la eficiencia del algoritmo QML.
                         </p>
                     </CardContent>
                 </Card>
