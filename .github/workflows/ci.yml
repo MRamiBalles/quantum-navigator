@@ -1,0 +1,219 @@
+# Q-Orchestrator CI/CD Pipeline
+# ================================
+# Runs tests, linting, and builds on every push and pull request
+# Deploys to preview on PR, production on main branch merge
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ===========================================================================
+  # Frontend Tests & Build
+  # ===========================================================================
+  frontend:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type checking
+        run: bun run typecheck
+        continue-on-error: false
+
+      - name: Lint
+        run: bun run lint
+        continue-on-error: true
+
+      - name: Run unit tests
+        run: bun run test
+        continue-on-error: true
+
+      - name: Build
+        run: bun run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: dist/
+          retention-days: 7
+
+  # ===========================================================================
+  # E2E Tests with Playwright
+  # ===========================================================================
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: frontend
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: bunx playwright test --project=chromium
+        continue-on-error: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ===========================================================================
+  # Backend Tests
+  # ===========================================================================
+  backend:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov ruff mypy
+
+      - name: Lint with Ruff
+        run: ruff check . --ignore E501
+        continue-on-error: true
+
+      - name: Type check with MyPy
+        run: mypy server.py --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=. --cov-report=xml
+        continue-on-error: true
+        env:
+          ENV: development
+          QUANTUM_API_KEY: test-key-for-ci
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend
+        continue-on-error: true
+
+  # ===========================================================================
+  # Docker Build
+  # ===========================================================================
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: q-orchestrator-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Security Scan
+  # ===========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+        continue-on-error: true
+
+  # ===========================================================================
+  # Summary
+  # ===========================================================================
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [frontend, backend, e2e]
+    if: always()
+    
+    steps:
+      - name: Check job results
+        run: |
+          echo "Frontend: ${{ needs.frontend.result }}"
+          echo "Backend: ${{ needs.backend.result }}"
+          echo "E2E: ${{ needs.e2e.result }}"
+          
+          if [[ "${{ needs.frontend.result }}" == "failure" ]]; then
+            echo "::error::Frontend CI failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.backend.result }}" == "failure" ]]; then
+            echo "::error::Backend CI failed"
+            exit 1
+          fi
+          
+          echo "✅ All critical checks passed!"

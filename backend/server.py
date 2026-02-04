@@ -26,6 +26,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, field_validator
 from optimizer import SpectralAODRouter
 from benchmarks.benchmark_qram import run_benchmark as run_qram_benchmark
@@ -39,7 +40,80 @@ from exporters.openqasm3 import OpenQASM3Exporter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Quantum Navigator Backend API", version="5.1")
+# ============================================================================
+# FastAPI Application with OpenAPI/Swagger Documentation
+# ============================================================================
+
+app = FastAPI(
+    title="Q-Orchestrator API",
+    description="""
+## Quantum Orchestration Middleware API
+
+**Q-Orchestrator** es un middleware de computación cuántica que proporciona:
+
+### 🔬 Benchmarks
+- Análisis de velocidad-fidelidad para átomos neutros
+- Comparación de estrategias de enfriamiento
+- Simulación de decodificadores GNN vs MWPM
+- Análisis de QRAM fonónica
+
+### 🧬 Exportadores
+- **Bloqade** (Julia) para QuEra/Pasqal
+- **OpenQASM 3.0** para IBM/Google
+
+### 📊 Optimización
+- SpectralAOD Router para topología de qubits
+- Modelo de calentamiento vibracional
+
+### 🔐 Autenticación
+Todas las rutas protegidas requieren el header `X-API-Key`.
+
+---
+
+**Versión:** 5.1 Industrial Release  
+**Licencia:** MIT  
+**Documentación:** [docs.q-orchestrator.dev](https://docs.q-orchestrator.dev)
+    """,
+    version="5.1.0",
+    contact={
+        "name": "Q-Orchestrator Team",
+        "url": "https://q-orchestrator.dev",
+        "email": "api@q-orchestrator.dev",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    openapi_tags=[
+        {
+            "name": "Health",
+            "description": "Endpoints de estado del servidor"
+        },
+        {
+            "name": "Benchmarks",
+            "description": "Ejecución y análisis de benchmarks cuánticos"
+        },
+        {
+            "name": "Export",
+            "description": "Exportadores HPC-Bridge para diferentes backends"
+        },
+        {
+            "name": "Optimization",
+            "description": "Optimización topológica de circuitos"
+        },
+        {
+            "name": "Favorites",
+            "description": "Gestión de configuraciones guardadas"
+        },
+        {
+            "name": "WebSocket",
+            "description": "Telemetría en tiempo real via WebSocket"
+        }
+    ],
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
 
 # ============================================================================
 # Security Configuration
@@ -388,9 +462,29 @@ async def simulate_benchmark_execution(
 # API Endpoints
 # ============================================================================
 
-@app.get("/")
+@app.get("/", tags=["Health"], summary="Health Check", response_description="Server status information")
 async def root():
-    return {"status": "online", "version": "5.1", "websocket": "/ws/benchmarks/{client_id}"}
+    """
+    Verifica el estado del servidor y devuelve información básica.
+    
+    **No requiere autenticación.**
+    
+    Retorna:
+    - `status`: Estado actual del servidor (online/offline)
+    - `version`: Versión de la API
+    - `websocket`: Endpoint de WebSocket para telemetría
+    - `docs`: URLs de documentación
+    """
+    return {
+        "status": "online",
+        "version": "5.1.0",
+        "websocket": "/ws/benchmarks/{client_id}",
+        "docs": {
+            "swagger": "/docs",
+            "redoc": "/redoc",
+            "openapi": "/openapi.json"
+        }
+    }
 
 @app.websocket("/ws/benchmarks/{client_id}")
 async def websocket_benchmark(websocket: WebSocket, client_id: str):
@@ -523,9 +617,22 @@ async def verify_api_key_header(x_api_key: str = Header(None, alias="X-API-Key")
     return x_api_key
 
 
-@app.post("/ws/benchmarks/{client_id}/stop", dependencies=[Depends(verify_api_key_header)])
+@app.post(
+    "/ws/benchmarks/{client_id}/stop",
+    tags=["Benchmarks"],
+    summary="Detener benchmark en ejecución",
+    dependencies=[Depends(verify_api_key_header)]
+)
 async def stop_benchmark(client_id: str):
-    """Stop a running benchmark via HTTP POST."""
+    """
+    Detiene un benchmark que está en ejecución.
+    
+    **Requiere autenticación:** `X-API-Key` header
+    
+    - **client_id**: ID único del cliente WebSocket
+    
+    Retorna confirmación de la solicitud de parada.
+    """
     # Validate client_id format
     if not re.match(r'^[a-zA-Z0-9_\-]{1,64}$', client_id):
         raise HTTPException(status_code=400, detail="Invalid client ID format")
